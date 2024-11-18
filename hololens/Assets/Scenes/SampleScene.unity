@@ -526,11 +526,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 1818114903}
   m_Enabled: 1
   m_EditorHideFlags: 0
-<<<<<<< HEAD
-  m_Script: {fileID: 11500000, guid: e9a9f05ca78fc889283b384717758f69, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
---- !u!1 &2110852257
+
 =======
   m_Script: {fileID: 11500000, guid: 352dcf98dc71c0aafa33c035083c6106, type: 3}
   m_Name: 
@@ -616,19 +612,12 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
->>>>>>> 4f96d96 (Unity config files)
+
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
   m_Roots:
   - {fileID: 963194228}
   - {fileID: 705507995}
-<<<<<<< HEAD
-  - {fileID: 2110852259}
-  - {fileID: 1818114905}
-  - {fileID: 1054816342}
-  - {fileID: 1391238037}
-=======
-  - {fileID: 1818114905}
   - {fileID: 1907850909}
->>>>>>> 4f96d96 (Unity config files)
+  - {fileID: 1818114905}

@@ -21,6 +21,7 @@ public class Startup : MonoBehaviour
     {
         var data = JsonManager.LoadFromFile("mesh_3");
 
+
         if (data != null && networkManager != null)
         {
             ProcessAndSendPackets(data);

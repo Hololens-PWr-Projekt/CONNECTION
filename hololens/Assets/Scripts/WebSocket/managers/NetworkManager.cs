@@ -14,7 +14,7 @@ namespace Manager.Networking
     private WebSocket webSocket;
     private Dictionary<string, List<Packet>> pendingPackets;
 
-    void Start()
+    void Awake()
     {
       pendingPackets = new Dictionary<string, List<Packet>>();
       ConnectToServer();
