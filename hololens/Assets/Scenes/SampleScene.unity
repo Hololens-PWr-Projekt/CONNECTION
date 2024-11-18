@@ -309,6 +309,7 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+<<<<<<< HEAD
 --- !u!1 &1054816338
 GameObject:
   m_ObjectHideFlags: 0
@@ -478,6 +479,8 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+=======
+>>>>>>> 4f96d96 (Unity config files)
 --- !u!1 &1818114903
 GameObject:
   m_ObjectHideFlags: 0
@@ -489,7 +492,11 @@ GameObject:
   - component: {fileID: 1818114905}
   - component: {fileID: 1818114906}
   m_Layer: 0
+<<<<<<< HEAD
   m_Name: StartupClient
+=======
+  m_Name: WebSocket
+>>>>>>> 4f96d96 (Unity config files)
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -519,10 +526,17 @@ MonoBehaviour:
   m_GameObject: {fileID: 1818114903}
   m_Enabled: 1
   m_EditorHideFlags: 0
+<<<<<<< HEAD
   m_Script: {fileID: 11500000, guid: e9a9f05ca78fc889283b384717758f69, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
 --- !u!1 &2110852257
+=======
+  m_Script: {fileID: 11500000, guid: 352dcf98dc71c0aafa33c035083c6106, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+--- !u!1 &1907850907
+>>>>>>> 4f96d96 (Unity config files)
 GameObject:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -530,6 +544,7 @@ GameObject:
   m_PrefabAsset: {fileID: 0}
   serializedVersion: 6
   m_Component:
+<<<<<<< HEAD
   - component: {fileID: 2110852259}
   - component: {fileID: 2110852260}
   m_Layer: 0
@@ -555,24 +570,65 @@ Transform:
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &2110852260
+=======
+  - component: {fileID: 1907850909}
+  - component: {fileID: 1907850908}
+  m_Layer: 0
+  m_Name: NetworkManager
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 2147483647
+  m_IsActive: 1
+--- !u!114 &1907850908
+>>>>>>> 4f96d96 (Unity config files)
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
+<<<<<<< HEAD
   m_GameObject: {fileID: 2110852257}
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: ff452fd955a88d7319d4d7c22c271d14, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+=======
+  m_GameObject: {fileID: 1907850907}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0d04831f6a73e625ba09a7d2d1b31fab, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+--- !u!4 &1907850909
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1907850907}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+>>>>>>> 4f96d96 (Unity config files)
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
   m_Roots:
   - {fileID: 963194228}
   - {fileID: 705507995}
+<<<<<<< HEAD
   - {fileID: 2110852259}
   - {fileID: 1818114905}
   - {fileID: 1054816342}
   - {fileID: 1391238037}
+=======
+  - {fileID: 1818114905}
+  - {fileID: 1907850909}
+>>>>>>> 4f96d96 (Unity config files)

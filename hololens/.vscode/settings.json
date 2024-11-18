@@ -52,6 +52,10 @@
         "temp/":true,
         "Temp/":true
     },
+<<<<<<< HEAD
     "dotnet.defaultSolution": "hololens.sln",
     "dotnet.preferCSharpExtension": true
+=======
+    "dotnet.defaultSolution": "hololens.sln"
+>>>>>>> 4f96d96 (Unity config files)
 }
