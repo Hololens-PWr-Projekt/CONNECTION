@@ -1,30 +1,32 @@
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
-from typing import Dict
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
+from packet_manager import PacketManager
 
 app = FastAPI()
 
-hololens_data = {}
+# CORS (for now)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+packet_manager = PacketManager()
 
 
-class HololensData(BaseModel):
-    device_id: str  # Hololens ID
-    sensor_data: Dict
+@app.websocket("/ws/hololens")
+async def websocket_endpoint(websocket: WebSocket):
+    await websocket.accept()
+    print("WebSocket connection established!")
 
+    try:
+        while True:
+            # Receive data from the Holo
+            data = await websocket.receive_text()
+            packet_manager.process_packet(data)
 
-@app.post("/hololens/data")
-async def receive_hololens_data(data: HololensData):
-    hololens_data[data.device_id] = data.sensor_data
-    return {"status": "Data received successfully"}
-
-
-@app.get("/hololens/data/{device_id}")
-async def get_hololens_data(device_id: str):
-    if device_id not in hololens_data:
-        raise HTTPException(status_code=404, detail="Device data not found")
-    return hololens_data[device_id]
-
-
-@app.get("/")
-async def root():
-    return {"message": "HoloLens Communication Server is running"}
+    except WebSocketDisconnect:
+        print(f"Connection closed!")
+    except Exception as e:
+        print(f"WebSocket error: {e}")
