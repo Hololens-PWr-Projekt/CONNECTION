@@ -1,0 +1,15 @@
+C:\Users\Marek\source\repos\CONNECTION\hololens\bin\Debug\net8.0\hololens.exe
+C:\Users\Marek\source\repos\CONNECTION\hololens\bin\Debug\net8.0\hololens.deps.json
+C:\Users\Marek\source\repos\CONNECTION\hololens\bin\Debug\net8.0\hololens.runtimeconfig.json
+C:\Users\Marek\source\repos\CONNECTION\hololens\bin\Debug\net8.0\hololens.dll
+C:\Users\Marek\source\repos\CONNECTION\hololens\bin\Debug\net8.0\hololens.pdb
+C:\Users\Marek\source\repos\CONNECTION\hololens\obj\Debug\net8.0\hololens.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\Marek\source\repos\CONNECTION\hololens\obj\Debug\net8.0\hololens.AssemblyInfoInputs.cache
+C:\Users\Marek\source\repos\CONNECTION\hololens\obj\Debug\net8.0\hololens.AssemblyInfo.cs
+C:\Users\Marek\source\repos\CONNECTION\hololens\obj\Debug\net8.0\hololens.csproj.CoreCompileInputs.cache
+C:\Users\Marek\source\repos\CONNECTION\hololens\obj\Debug\net8.0\hololens.sourcelink.json
+C:\Users\Marek\source\repos\CONNECTION\hololens\obj\Debug\net8.0\hololens.dll
+C:\Users\Marek\source\repos\CONNECTION\hololens\obj\Debug\net8.0\refint\hololens.dll
+C:\Users\Marek\source\repos\CONNECTION\hololens\obj\Debug\net8.0\hololens.pdb
+C:\Users\Marek\source\repos\CONNECTION\hololens\obj\Debug\net8.0\hololens.genruntimeconfig.cache
+C:\Users\Marek\source\repos\CONNECTION\hololens\obj\Debug\net8.0\ref\hololens.dll
