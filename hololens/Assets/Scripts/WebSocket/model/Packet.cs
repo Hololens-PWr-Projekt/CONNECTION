@@ -1,7 +1,6 @@
 using System;
 using System.ComponentModel;
 using System.Reflection;
-using UnityEngine;
 
 namespace Model.Packet
 {
@@ -39,7 +38,7 @@ namespace Model.Packet
     Triangles
   }
 
-  // Helper class for working with PacketType enums
+  // Helper class for getting enum's string description
   public static class PacketTypeExtensions
   {
     public static string GetDescription(this Enum value)
