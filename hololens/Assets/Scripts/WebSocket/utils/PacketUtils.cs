@@ -8,14 +8,13 @@ namespace Utils.Packets
 {
     public static class PacketUtils
     {
-        private const int MAX_CHUNK_BYTES = 256;
+        private const int MAX_CHUNK_BYTES = 1024;
 
         public static List<Packet> SplitData(string packetId, PacketType type, string data)
         {
             List<Packet> packets = new();
 
-            string jsonData = JsonManager.ToJson(data);
-            // Implement in json manager
+            string jsonData = JsonManager.Serialize(data);
             byte[] dataBytes = Encoding.UTF8.GetBytes(jsonData);
             int totalPackets = (int)Math.Ceiling((double)dataBytes.Length / MAX_CHUNK_BYTES);
             int totalSize = dataBytes.Length;

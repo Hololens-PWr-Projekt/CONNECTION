@@ -28,6 +28,7 @@ namespace Manager.Networking
       webSocket.OnError += (e) => Debug.Log("NetworkManager - Error! " + e);
       webSocket.OnClose += (e) => Debug.Log("NetworkManager - Connection closed!");
 
+      // Receive data from the server
       webSocket.OnMessage += (bytes) =>
       {
         var message = System.Text.Encoding.UTF8.GetString(bytes);
@@ -56,7 +57,7 @@ namespace Manager.Networking
 
       foreach (var packet in packets)
       {
-        string packetJson = JsonManager.ToJson(packet);
+        string packetJson = JsonManager.Serialize(packet);
 
         if (IsWebSocketOpen())
         {
@@ -83,7 +84,7 @@ namespace Manager.Networking
 
     void Update()
     {
-      // Make sure to poll the WebSocket on each frame to receive messages
+      // Poll the WebSocket on each frame to receive messages
       webSocket?.DispatchMessageQueue();
     }
 
