@@ -5,9 +5,13 @@ using UnityEngine;
 using Newtonsoft.Json;
 
 namespace Manager.Json
+// stworzyc pomocnia klase Logging(nazwa, content) -> JsonManager - {message}
 {
     public static class JsonManager
     {
+        private static readonly string DataPath = Path.Combine(Application.dataPath, "Scripts", "data");
+
+        // Load JSON and deserilize its content into a dictionary
         public static Dictionary<string, object> LoadFromFile(string fileName)
         {
             string filePath = Path.Combine(Application.dataPath, "Scripts", "data", fileName + ".json");
@@ -16,21 +20,12 @@ namespace Manager.Json
             {
                 if (!File.Exists(filePath))
                 {
-                    Debug.LogError($"JsonManager - File not found at path: {filePath}");
+                    Debug.Log($"File not found at path: {filePath}");
                     return null;
                 }
 
                 string jsonContent = File.ReadAllText(filePath);
-
-                // Parse the JSON content into a dictionary
-                var result = JsonConvert.DeserializeObject<Dictionary<string, object>>(jsonContent);
-                if (result == null)
-                {
-                    Debug.LogError("JsonManager - Failed to parse JSON content.");
-                }
-
-
-                return result;
+                return Deserialize<Dictionary<string, object>>(jsonContent);
             }
             catch (Exception e)
             {
@@ -39,21 +34,7 @@ namespace Manager.Json
             }
         }
 
-        public static T FromJson<T>(string jsonData)
-        {
-            try
-            {
-                return JsonConvert.DeserializeObject<T>(jsonData);
-            }
-            catch (Exception ex)
-            {
-                Debug.LogError($"JsonManager - Failed to serialize object. Exception: {ex.Message}");
-                return default(T);
-            }
-        }
-
-        // Convert an object to a JSON string.
-        public static string ToJson<T>(T data)
+        public static string Serialize<T>(T data)
         {
             try
             {
@@ -64,8 +45,23 @@ namespace Manager.Json
                 Debug.LogError($"JsonManager - Failed to serialize object. Exception: {ex.Message}");
                 return null;
             }
+
         }
 
+        public static T Deserialize<T>(string jsonData)
+        {
+            try
+            {
+                return JsonConvert.DeserializeObject<T>(jsonData);
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"JsonManager - Failed to serialize object. Exception: {ex.Message}");
+                return default;
+            }
+        }
 
+        private static string GetFilePath(string fileName) => Path.Combine(DataPath, $"{fileName}.json");
     }
+
 }
