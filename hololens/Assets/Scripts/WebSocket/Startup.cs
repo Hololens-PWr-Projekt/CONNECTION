@@ -1,10 +1,10 @@
+using System.Collections.Generic;
 using UnityEngine;
 using Manager.Json;
 using Manager.Networking;
 using Model.Packet;
 using Model.Vector3D;
 using Utils.Packets;
-using System.Collections.Generic;
 
 
 public class Startup : MonoBehaviour
@@ -13,56 +13,45 @@ public class Startup : MonoBehaviour
 
     void Awake()
     {
-        Debug.Log("Startup - Initializing application...");
         networkManager = FindObjectOfType<NetworkManager>();
     }
 
     void Start()
     {
-        var data = JsonManager.LoadFromFile("mesh_3");
+        var data = JsonManager.LoadFromFile("mesh_0");
 
 
         if (data != null && networkManager != null)
         {
-            ProcessAndSendPackets(data);
+            ProcessAndSendPackets<Vector3D>(data, PacketType.Vertices);
+            ProcessAndSendPackets<int>(data, PacketType.Triangles);
         }
         else
         {
-            Debug.LogError($"Failed to load mesh_0.json data.");
+            Debug.LogError($"Failed to load JSON data or NetworkManager not initialized!");
         }
     }
 
-    private void ProcessAndSendPackets(Dictionary<string, object> data)
+    private void ProcessAndSendPackets<T>(Dictionary<string, object> data, PacketType type)
     {
-        if (data.ContainsKey("vertices"))
-        {
-            var vertexDataJson = JsonManager.ToJson(data["vertices"]);
-            var vertexData = JsonManager.FromJson<List<Vector3D>>(vertexDataJson);
+        string key = PacketTypeExtensions.GetDescription(type);
 
-            SendPackets(vertexData, PacketType.Vertices);
+        if (data.ContainsKey(key))
+        {
+            var vertexDataJson = JsonManager.Serialize(data[key]);
+            var vertexData = JsonManager.Deserialize<List<T>>(vertexDataJson);
+
+            SendPackets(vertexData, type);
         }
         else
         {
-            Debug.LogWarning("No 'vertices' data found in the input JSON.");
-        }
-
-        if (data.ContainsKey("triangles"))
-        {
-            var triangleDataJson = JsonManager.ToJson(data["triangles"]);
-            var triangleData = JsonManager.FromJson<List<int>>(triangleDataJson);
-
-
-            SendPackets(triangleData, PacketType.Triangles);
-        }
-        else
-        {
-            Debug.LogWarning("No 'triangles' data found in the input JSON.");
+            Debug.LogWarning($"No {key} data found in the input JSON.");
         }
     }
 
     private void SendPackets<T>(List<T> data, PacketType type)
     {
-        string serializedValue = JsonManager.ToJson(data);
+        string serializedValue = JsonManager.Serialize(data);
 
         // Split data into packets
         int counter = 0;
@@ -73,7 +62,7 @@ public class Startup : MonoBehaviour
             packets,
             onPacketSent: (Packet packet) =>
             {
-                Debug.Log($"Packet {packet.Index} sent successfully for dataType: {packet.Type}");
+                Debug.Log($"Packet {packet.Index} sent successfully for type: {packet.Type}");
             },
             onAllPacketsSent: (string packetId) =>
             {

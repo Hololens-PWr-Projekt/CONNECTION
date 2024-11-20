@@ -5,7 +5,6 @@ using UnityEngine;
 using Newtonsoft.Json;
 
 namespace Manager.Json
-// stworzyc pomocnia klase Logging(nazwa, content) -> JsonManager - {message}
 {
     public static class JsonManager
     {
@@ -20,8 +19,8 @@ namespace Manager.Json
             {
                 if (!File.Exists(filePath))
                 {
-                    Debug.Log($"File not found at path: {filePath}");
-                    return null;
+                    Debug.LogWarning($"JsonManager - File not found at path: {filePath}");
+                    return null; 
                 }
 
                 string jsonContent = File.ReadAllText(filePath);
