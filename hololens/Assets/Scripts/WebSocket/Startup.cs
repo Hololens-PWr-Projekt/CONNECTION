@@ -6,7 +6,6 @@ using Model.Packet;
 using Model.Vector3D;
 using Utils.Packets;
 
-
 public class Startup : MonoBehaviour
 {
     private NetworkManager networkManager;
@@ -16,9 +15,9 @@ public class Startup : MonoBehaviour
         networkManager = FindObjectOfType<NetworkManager>();
     }
 
-    void Start()
+    public void OnTestButtonClicked()
     {
-        var data = JsonManager.LoadFromFile("mesh_0");
+        var data = JsonManager.LoadFromFile("mesh_3");
 
 
         if (data != null && networkManager != null)
@@ -40,7 +39,6 @@ public class Startup : MonoBehaviour
         {
             var vertexDataJson = JsonManager.Serialize(data[key]);
             var vertexData = JsonManager.Deserialize<List<T>>(vertexDataJson);
-
             SendPackets(vertexData, type);
         }
         else
@@ -57,12 +55,12 @@ public class Startup : MonoBehaviour
         int counter = 0;
         string packetId = "data_" + counter;
         List<Packet> packets = PacketUtils.SplitData(packetId, type, serializedValue);
-        // Send packets using the network manager
+        
         networkManager.SendPackets(
             packets,
             onPacketSent: (Packet packet) =>
             {
-                Debug.Log($"Packet {packet.Index} sent successfully for type: {packet.Type}");
+                Debug.Log($"Packet {packet.Index} sent successfully for type: {packet.PacketType}");
             },
             onAllPacketsSent: (string packetId) =>
             {
