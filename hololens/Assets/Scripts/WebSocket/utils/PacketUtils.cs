@@ -4,36 +4,38 @@ using System.Text;
 using Model.Packet;
 using Manager.Json;
 
-namespace Utils.Packets;
-public static class PacketUtils
+namespace Utils.Packets
 {
-    private const int MAX_CHUNK_BYTES = 1024;
-
-    public static List<Packet> SplitData(string packetId, PacketType type, string data)
+    public static class PacketUtils
     {
-        List<Packet> packets = new();
+        private const int MAX_CHUNK_BYTES = 1024;
 
-        string jsonData = JsonManager.Serialize(data);
-        byte[] dataBytes = Encoding.UTF8.GetBytes(jsonData);
-        int totalPackets = (int)Math.Ceiling((double)dataBytes.Length / MAX_CHUNK_BYTES);
-        int totalSize = dataBytes.Length;
-
-        for (int i = 0; i < totalPackets; i++)
+        public static List<Packet> SplitData(string packetId, PacketType type, string data)
         {
-            int start = i * MAX_CHUNK_BYTES;
-            int length = Math.Min(MAX_CHUNK_BYTES, totalSize - start);
+            List<Packet> packets = new();
 
-            // Extract the byte chunk
-            byte[] chunkBytes = new byte[length];
-            Array.Copy(dataBytes, start, chunkBytes, 0, length);
+            string jsonData = JsonManager.Serialize(data);
+            byte[] dataBytes = Encoding.UTF8.GetBytes(jsonData);
+            int totalPackets = (int)Math.Ceiling((double)dataBytes.Length / MAX_CHUNK_BYTES);
+            int totalSize = dataBytes.Length;
 
-            // Convert byte chunk back to string for packet
-            string chunk = Encoding.UTF8.GetString(chunkBytes);
-            bool isLast = i == totalPackets - 1;
+            for (int i = 0; i < totalPackets; i++)
+            {
+                int start = i * MAX_CHUNK_BYTES;
+                int length = Math.Min(MAX_CHUNK_BYTES, totalSize - start);
 
-            packets.Add(new Packet(packetId, type, i, isLast, chunk));
+                // Extract the byte chunk
+                byte[] chunkBytes = new byte[length];
+                Array.Copy(dataBytes, start, chunkBytes, 0, length);
+
+                // Convert byte chunk back to string for packet
+                string chunk = Encoding.UTF8.GetString(chunkBytes);
+                bool isLast = i == totalPackets - 1;
+
+                packets.Add(new Packet(packetId, type, i, isLast, chunk));
+            }
+
+            return packets;
         }
-
-        return packets;
     }
 }

@@ -4,106 +4,109 @@ using UnityEngine;
 using Manager.Json;
 using Model.Packet;
 
-namespace Manager.Networking;
-public class NetworkManager : MonoBehaviour
+namespace Manager.Networking
 {
-  public delegate void PacketSentCallback(Packet packet);
-  public delegate void AllPacketsSentCallback(string packetId);
 
-  private WebSocket webSocket;
-  private Dictionary<string, List<Packet>> pendingPackets;
-
-  void Awake()
+  public class NetworkManager : MonoBehaviour
   {
-    pendingPackets = new Dictionary<string, List<Packet>>();
-    ConnectToServer();
-  }
+    public delegate void PacketSentCallback(Packet packet);
+    public delegate void AllPacketsSentCallback(string packetId);
 
-  async void ConnectToServer()
-  {
-    webSocket = new WebSocket("ws://localhost:8080/ws/hololens");
+    private WebSocket webSocket;
+    private Dictionary<string, List<Packet>> pendingPackets;
 
-    webSocket.OnOpen += () => Debug.Log("NetworkManager - Connection open!");
-    webSocket.OnError += (e) => Debug.Log("NetworkManager - Error! " + e);
-    webSocket.OnClose += (e) => Debug.Log("NetworkManager - Connection closed!");
-
-    // Receive data from the server
-    webSocket.OnMessage += (bytes) =>
+    void Awake()
     {
-      var message = System.Text.Encoding.UTF8.GetString(bytes);
-      Debug.Log("Received OnMessage! (" + bytes.Length + " bytes) " + message);
-    };
-
-    await webSocket.Connect();
-  }
-
-  public async void SendPackets(List<Packet> packets, PacketSentCallback onPacketSent = null, AllPacketsSentCallback onAllPacketsSent = null)
-  {
-    if (ArePacketsEmpty(packets))
-    {
-      Debug.LogWarning("NetworkManager - No packed to send.");
-      return;
+      pendingPackets = new Dictionary<string, List<Packet>>();
+      ConnectToServer();
     }
 
-    string packetId = packets[0].PacketId;
-
-    if (!pendingPackets.ContainsKey(packetId))
+    async void ConnectToServer()
     {
-      pendingPackets[packetId] = new List<Packet>(packets);
-    }
+      webSocket = new WebSocket("ws://localhost:8080/ws/hololens");
 
-    foreach (var packet in packets)
-    {
-      string packetJson = JsonManager.Serialize(packet);
+      webSocket.OnOpen += () => Debug.Log("NetworkManager - Connection open!");
+      webSocket.OnError += (e) => Debug.Log("NetworkManager - Error! " + e);
+      webSocket.OnClose += (e) => Debug.Log("NetworkManager - Connection closed!");
 
-      if (IsWebSocketOpen())
+      // Receive data from the server
+      webSocket.OnMessage += (bytes) =>
       {
-        await webSocket.SendText(packetJson);
-        onPacketSent?.Invoke(packet);
-        pendingPackets[packetId].Remove(packet);
+        var message = System.Text.Encoding.UTF8.GetString(bytes);
+        Debug.Log("Received OnMessage! (" + bytes.Length + " bytes) " + message);
+      };
 
-        Debug.Log($"Packet sent: {packet.PacketId}, index: {packet.Index}, isLast: {packet.IsLast}, type: {packet.PacketType}");
+      await webSocket.Connect();
+    }
 
-        if (IsLastPacket(packet.PacketId, packet.IsLast))
+    public async void SendPackets(List<Packet> packets, PacketSentCallback onPacketSent = null, AllPacketsSentCallback onAllPacketsSent = null)
+    {
+      if (ArePacketsEmpty(packets))
+      {
+        Debug.LogWarning("NetworkManager - No packed to send.");
+        return;
+      }
+
+      string packetId = packets[0].PacketId;
+
+      if (!pendingPackets.ContainsKey(packetId))
+      {
+        pendingPackets[packetId] = new List<Packet>(packets);
+      }
+
+      foreach (var packet in packets)
+      {
+        string packetJson = JsonManager.Serialize(packet);
+
+        if (IsWebSocketOpen())
         {
-          pendingPackets.Remove(packetId);
-          onAllPacketsSent?.Invoke(packetId);
+          await webSocket.SendText(packetJson);
+          onPacketSent?.Invoke(packet);
+          pendingPackets[packetId].Remove(packet);
+
+          Debug.Log($"Packet sent: {packet.PacketId}, index: {packet.Index}, isLast: {packet.IsLast}, type: {packet.PacketType}");
+
+          if (IsLastPacket(packet.PacketId, packet.IsLast))
+          {
+            pendingPackets.Remove(packetId);
+            onAllPacketsSent?.Invoke(packetId);
+          }
+        }
+        else
+        {
+          Debug.LogError("NetworkManager - WebSocket is not connected! Cannot send packets!");
+          break;
         }
       }
-      else
+    }
+
+    void Update()
+    {
+      // Poll the WebSocket on each frame to receive messages
+      webSocket?.DispatchMessageQueue();
+    }
+
+    private async void OnApplicationQuit()
+    {
+      if (IsWebSocketOpen())
       {
-        Debug.LogError("NetworkManager - WebSocket is not connected! Cannot send packets!");
-        break;
+        await webSocket.Close();
       }
     }
-  }
 
-  void Update()
-  {
-    // Poll the WebSocket on each frame to receive messages
-    webSocket?.DispatchMessageQueue();
-  }
-
-  private async void OnApplicationQuit()
-  {
-    if (IsWebSocketOpen())
+    private bool IsWebSocketOpen()
     {
-      await webSocket.Close();
+      return webSocket.State == WebSocketState.Open;
     }
-  }
 
-  private bool IsWebSocketOpen()
-  {
-    return webSocket.State == WebSocketState.Open;
-  }
+    private bool ArePacketsEmpty(List<Packet> packets)
+    {
+      return packets.Count == 0;
+    }
 
-  private bool ArePacketsEmpty(List<Packet> packets)
-  {
-    return packets.Count == 0;
-  }
-
-  private bool IsLastPacket(string packetId, bool isLast)
-  {
-    return isLast && pendingPackets[packetId].Count == 0;
+    private bool IsLastPacket(string packetId, bool isLast)
+    {
+      return isLast && pendingPackets[packetId].Count == 0;
+    }
   }
 }
