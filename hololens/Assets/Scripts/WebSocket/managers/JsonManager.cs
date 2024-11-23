@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Serialization;
 
 namespace Manager.Json
 {
@@ -10,10 +11,10 @@ namespace Manager.Json
     {
         private static readonly string DataPath = Path.Combine(Application.dataPath, "Scripts", "data");
 
-        // Load JSON and deserilize its content into a dictionary
+        // Load JSON and deserialize its content into a dictionary
         public static Dictionary<string, object> LoadFromFile(string fileName)
         {
-            string filePath = Path.Combine(Application.dataPath, "Scripts", "data", fileName + ".json");
+            string filePath = Path.Combine(DataPath, fileName + ".json");
 
             try
             {
@@ -33,34 +34,45 @@ namespace Manager.Json
             }
         }
 
+        // Serialize data into JSON format, keeping original property names
         public static string Serialize<T>(T data)
         {
             try
             {
-                return JsonConvert.SerializeObject(data, Formatting.None);
+                // Preserve original property names
+                JsonSerializerSettings settings = new()
+                {
+                    ContractResolver = new DefaultContractResolver()
+                };
+
+                return JsonConvert.SerializeObject(data, Formatting.None, settings);
             }
             catch (Exception ex)
             {
                 Debug.LogError($"JsonManager - Failed to serialize object. Exception: {ex.Message}");
                 return null;
             }
-
         }
 
+        // Deserialize JSON string into an object, respecting original property names
         public static T Deserialize<T>(string jsonData)
         {
             try
             {
-                return JsonConvert.DeserializeObject<T>(jsonData);
+                JsonSerializerSettings settings = new()
+                {
+                    ContractResolver = new DefaultContractResolver()
+                };
+                return JsonConvert.DeserializeObject<T>(jsonData, settings);
             }
             catch (Exception ex)
             {
-                Debug.LogError($"JsonManager - Failed to serialize object. Exception: {ex.Message}");
+                Debug.LogError($"JsonManager - Failed to deserialize object. Exception: {ex.Message}");
                 return default;
             }
         }
 
+        // Helper function to get the file path
         private static string GetFilePath(string fileName) => Path.Combine(DataPath, $"{fileName}.json");
     }
-
 }

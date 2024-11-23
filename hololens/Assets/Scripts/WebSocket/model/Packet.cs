@@ -8,7 +8,7 @@ namespace Model.Packet
   public class Packet
   {
     private string packetId;
-    private string type;
+    private string packetType;
     private int index;
     private bool isLast;
     private string chunk;
@@ -16,14 +16,14 @@ namespace Model.Packet
     public Packet(string packetId, PacketType type, int index, bool isLast, string chunk)
     {
       this.PacketId = packetId;
-      this.Type = PacketTypeExtensions.GetDescription(type);
+      this.PacketType = PacketTypeExtensions.GetDescription(type);
       this.Index = index;
       this.IsLast = isLast;
       this.Chunk = chunk;
     }
 
     public string PacketId { get => packetId; set => packetId = value; }
-    public string Type { get => type; set => type = value; }
+    public string PacketType { get => packetType; set => packetType = value; }
     public int Index { get => index; set => index = value; }
     public bool IsLast { get => isLast; set => isLast = value; }
     public string Chunk { get => chunk; set => chunk = value; }
