@@ -53,8 +53,6 @@ namespace Manager.Networking
         pendingPackets[packetId] = new List<Packet>(packets);
       }
 
-      Debug.Log($"NetworkManager - Sending packets for packetId: {packetId}");
-
       foreach (var packet in packets)
       {
         string packetJson = JsonManager.Serialize(packet);
@@ -65,11 +63,10 @@ namespace Manager.Networking
           onPacketSent?.Invoke(packet);
           pendingPackets[packetId].Remove(packet);
 
-          Debug.Log($"Packet sent: {packet.PacketId}, index: {packet.Index}, isLast: {packet.IsLast}, type: {packet.Type}");
+          Debug.Log($"Packet sent: {packet.PacketId}, index: {packet.Index}, isLast: {packet.IsLast}, type: {packet.PacketType}");
 
           if (IsLastPacket(packet.PacketId, packet.IsLast))
           {
-            Debug.Log($"All packets sent for packetId: {packetId}");
             pendingPackets.Remove(packetId);
             onAllPacketsSent?.Invoke(packetId);
           }
