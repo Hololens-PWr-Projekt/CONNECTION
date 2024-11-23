@@ -1,16 +1,17 @@
+using Newtonsoft.Json;
 using System;
 
-namespace Model.Vector3D
+namespace Model.Vertex
 {
 
     [Serializable]
-    public class Vector3D
+    public class Vertex
     {
         private float x;
         private float y;
         private float z;
 
-        public Vector3D(float x, float y, float z)
+        public Vertex(float x, float y, float z)
         {
             this.x = x;
             this.y = y;
