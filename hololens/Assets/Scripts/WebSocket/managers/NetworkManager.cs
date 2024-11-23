@@ -64,9 +64,7 @@ namespace Manager.Networking
           onPacketSent?.Invoke(packet);
           pendingPackets[packetId].Remove(packet);
 
-          Debug.Log($"Packet sent: {packet.PacketId}, index: {packet.Index}, isLast: {packet.IsLast}, type: {packet.PacketType}");
-
-          if (IsLastPacket(packet.PacketId, packet.IsLast))
+          if (IsLastPacket(packet))
           {
             pendingPackets.Remove(packetId);
             onAllPacketsSent?.Invoke(packetId);
@@ -104,9 +102,9 @@ namespace Manager.Networking
       return packets.Count == 0;
     }
 
-    private bool IsLastPacket(string packetId, bool isLast)
+    private bool IsLastPacket(Packet packet)
     {
-      return isLast && pendingPackets[packetId].Count == 0;
+      return packet.Chunk.SequenceNumber == packet.Chunk.TotalChunks && pendingPackets[packet.PacketId].Count == 0;
     }
   }
 }
