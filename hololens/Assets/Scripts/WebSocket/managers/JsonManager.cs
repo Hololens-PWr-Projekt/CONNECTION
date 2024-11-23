@@ -35,6 +35,7 @@ namespace Manager.Json
                 }
 
                 string jsonContent = File.ReadAllText(filePath);
+
                 return Deserialize<Dictionary<string, object>>(jsonContent);
             }
             catch (Exception e)
