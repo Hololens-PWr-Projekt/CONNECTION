@@ -1,0 +1,15 @@
+# Avalonia Setup and Run Instructions
+
+This guide will walk you through the steps to set up and run an Avalonia application.
+
+## Prerequisites
+
+Before you begin, make sure you have the following installed on your machine:
+
+- **.NET SDK**: Avalonia is built on .NET, so you need the .NET SDK (6.0 or later) installed. You can download it from the official .NET website: [https://dotnet.microsoft.com/download](https://dotnet.microsoft.com/download)
+- **Visual Studio** (Optional but recommended): A development environment to build and run the project.
+- **Plugins** C#, Avalonia
+
+## Run
+> dotnet build && dotnet run
+
