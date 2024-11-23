@@ -9,24 +9,57 @@ namespace Model.Packet
   {
     private string packetId;
     private string packetType;
-    private int index;
-    private bool isLast;
-    private string chunk;
+    private Chunk chunk;
+    private Metadata metadata;
 
-    public Packet(string packetId, PacketType type, int index, bool isLast, string chunk)
+    public Packet(string packetId, PacketType type, Chunk chunk, Metadata metadata)
     {
       this.PacketId = packetId;
       this.PacketType = PacketTypeExtensions.GetDescription(type);
-      this.Index = index;
-      this.IsLast = isLast;
       this.Chunk = chunk;
+      this.Metadata = metadata;
     }
 
     public string PacketId { get => packetId; set => packetId = value; }
     public string PacketType { get => packetType; set => packetType = value; }
-    public int Index { get => index; set => index = value; }
-    public bool IsLast { get => isLast; set => isLast = value; }
-    public string Chunk { get => chunk; set => chunk = value; }
+    public Chunk Chunk { get => chunk; set => chunk = value; }
+    public Metadata Metadata { get => metadata; set => metadata = value; }
+    public bool IsLast()
+    {
+      return chunk.SequenceNumber == chunk.TotalChunks;
+    }
+  }
+
+  [Serializable]
+  public class Chunk
+  {
+    private int sequenceNumber;
+    private int totalChunks;
+    private string data;
+
+    public Chunk(int sequenceNumber, int totalChunks, string data)
+    {
+      this.SequenceNumber = sequenceNumber;
+      this.TotalChunks = totalChunks;
+      this.Data = data;
+    }
+
+    public int SequenceNumber { get => sequenceNumber; set => sequenceNumber = value; }
+    public int TotalChunks { get => totalChunks; set => totalChunks = value; }
+    public string Data { get => data; set => data = value; }
+  }
+
+  [Serializable]
+  public class Metadata
+  {
+    private int chunkSizeBytes;
+
+    public Metadata(int chunkSizeBytes)
+    {
+      this.ChunkSizeBytes = chunkSizeBytes;
+    }
+
+    public int ChunkSizeBytes { get => chunkSizeBytes; set => chunkSizeBytes = value; }
   }
 
   // In future, get PacketTypes from server on startup

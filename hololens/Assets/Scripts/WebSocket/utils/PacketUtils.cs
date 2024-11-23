@@ -1,6 +1,7 @@
-using System.Collections.Generic;
 using System;
 using System.Text;
+using System.Linq;
+using System.Collections.Generic;
 using Model.Packet;
 using Manager.Json;
 
@@ -10,32 +11,68 @@ namespace Utils.Packets
     {
         private const int MAX_CHUNK_BYTES = 1024;
 
-        public static List<Packet> SplitData(string packetId, PacketType type, string data)
+        public static List<Packet> Split(string packetId, PacketType type, object payload)
         {
+            string jsonData = JsonManager.Serialize(payload);
             List<Packet> packets = new();
+            List<string> chunks = SplitIntoChunks(jsonData);
+            int totalChunks = chunks.Count;
 
-            string jsonData = JsonManager.Serialize(data);
-            byte[] dataBytes = Encoding.UTF8.GetBytes(jsonData);
-            int totalPackets = (int)Math.Ceiling((double)dataBytes.Length / MAX_CHUNK_BYTES);
-            int totalSize = dataBytes.Length;
-
-            for (int i = 0; i < totalPackets; i++)
+            for (int i = 0; i < totalChunks; i++)
             {
-                int start = i * MAX_CHUNK_BYTES;
-                int length = Math.Min(MAX_CHUNK_BYTES, totalSize - start);
+                Chunk chunk = new(i + 1, totalChunks, chunks[i]);
+                int chunk_bytes = Encoding.Unicode.GetByteCount(chunks[i]);
+                Metadata metadata = new(chunk_bytes);
 
-                // Extract the byte chunk
-                byte[] chunkBytes = new byte[length];
-                Array.Copy(dataBytes, start, chunkBytes, 0, length);
-
-                // Convert byte chunk back to string for packet
-                string chunk = Encoding.UTF8.GetString(chunkBytes);
-                bool isLast = i == totalPackets - 1;
-
-                packets.Add(new Packet(packetId, type, i, isLast, chunk));
+                packets.Add(new Packet(packetId, type, chunk, metadata));
             }
 
             return packets;
+        }
+
+        // The logic will go to desktop client
+        public static string Reassemble(List<Packet> packets)
+        {
+            if (ArePacketsEmpty(packets))
+            {
+                throw new ArgumentException("Packets list cannot be null!");
+            }
+
+            string packetId = packets.First().PacketId;
+            string packetType = packets.First().PacketType;
+
+            if (ArePacektsSame(packets, packetId, packetType)) {
+                throw new InvalidOperationException("All packets must have the same PacketId and PacketType.");
+            }
+
+            packets = packets.OrderBy(p => p.Chunk.SequenceNumber).ToList();
+            string combinedData = string.Join("", packets.Select(p => p.Chunk.Data));
+
+            return combinedData;
+        }
+
+        private static bool ArePacektsSame(List<Packet> packets, string packetId, string packetType)
+        {
+            return !packets.All(p => p.PacketId == packetId && p.PacketType == packetType);
+        }
+
+        private static bool ArePacketsEmpty(List<Packet> packets)
+        {
+            return packets == null || packets.Count == 0;
+        }
+
+        private static List<string> SplitIntoChunks(string data)
+        {
+            List<string> chunks = new();
+            int totalLength = data.Length;
+
+            for (int i = 0; i < totalLength; i += MAX_CHUNK_BYTES)
+            {
+                int length = Math.Min(MAX_CHUNK_BYTES, totalLength - i);
+                chunks.Add(data.Substring(i, length));
+            }
+
+            return chunks;
         }
     }
 }

@@ -1,9 +1,10 @@
 using System.Collections.Generic;
+using System;
 using UnityEngine;
 using Manager.Json;
 using Manager.Networking;
 using Model.Packet;
-using Model.Vector3D;
+using Model.Vertex;
 using Utils.Packets;
 
 public class Startup : MonoBehaviour
@@ -18,13 +19,12 @@ public class Startup : MonoBehaviour
 
     public void OnTestButtonClicked()
     {
-        var data = JsonManager.LoadFromFile("mesh_3");
+        Dictionary<string, object> fileData = JsonManager.LoadFromFile("mesh_3");
 
-
-        if (data != null && networkManager != null)
+        if (CanDataBeSent(fileData))
         {
-            ProcessAndSendPackets<Vector3D>(data, PacketType.Vertices);
-            ProcessAndSendPackets<int>(data, PacketType.Triangles);
+            ProcessAndSendPackets<List<Vertex>>(fileData, PacketType.Vertices);
+            ProcessAndSendPackets<List<int>>(fileData, PacketType.Triangles);
         }
         else
         {
@@ -32,15 +32,15 @@ public class Startup : MonoBehaviour
         }
     }
 
-    private void ProcessAndSendPackets<T>(Dictionary<string, object> data, PacketType type)
+    private void ProcessAndSendPackets<T>(Dictionary<string, object> fileData, PacketType type)
     {
         string key = PacketTypeExtensions.GetDescription(type);
 
-        if (data.ContainsKey(key))
+        if (fileData.ContainsKey(key))
         {
-            var vertexDataJson = JsonManager.Serialize(data[key]);
-            var vertexData = JsonManager.Deserialize<List<T>>(vertexDataJson);
-            SendPackets(vertexData, type);
+            string dataJson = JsonManager.Serialize(fileData[key]);
+            var data = JsonManager.Deserialize<T>(dataJson);
+            SendPackets(data, type);
         }
         else
         {
@@ -48,26 +48,29 @@ public class Startup : MonoBehaviour
         }
     }
 
-    private void SendPackets<T>(List<T> data, PacketType type)
+    private void SendPackets<T>(T data, PacketType type)
     {
         string serializedValue = JsonManager.Serialize(data);
+        string packetId = Guid.NewGuid().ToString();
 
-        // Split data into packets
-        int counter = 0;
-        string packetId = "data_" + counter;
-        List<Packet> packets = PacketUtils.SplitData(packetId, type, serializedValue);
-        
+        List<Packet> packets = PacketUtils.Split(packetId, type, serializedValue);
+
         networkManager.SendPackets(
             packets,
             onPacketSent: (Packet packet) =>
             {
-                Debug.Log($"Packet {packet.Index} sent successfully for type: {packet.PacketType}");
+                Debug.Log($"Packet {packet.Chunk.SequenceNumber}/{packet.Chunk.TotalChunks} sent successfully.");
             },
-            onAllPacketsSent: (string packetId) =>
+            onAllPacketsSent: (string completedPacketId) =>
             {
-                Debug.Log($"All packets sent for packetId: {packetId}");
-                counter++;
+                Debug.Log($"All packets sent for packetId: {completedPacketId}");
             }
         );
+    }
+
+
+    private bool CanDataBeSent(object data)
+    {
+        return data != null && networkManager != null;
     }
 }
