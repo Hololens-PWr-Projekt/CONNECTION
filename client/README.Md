@@ -6,6 +6,11 @@ Before you begin, make sure you have the following installed on your machine:
 - **Visual Studio** (Optional but recommended): A development environment to build and run the project.
 - **Plugins** C#, Avalonia
 
+## Install
+```bash
+dotnet new -i Avalonia.Templates
+```
 ## Run
-> dotnet build && dotnet run
-
+```bash 
+dotnet build && dotnet run
+```
