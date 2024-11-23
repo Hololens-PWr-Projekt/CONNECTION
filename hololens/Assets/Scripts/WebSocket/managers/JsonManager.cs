@@ -11,6 +11,15 @@ namespace Manager.Json
     {
         private static readonly string DataPath = Path.Combine(Application.dataPath, "Scripts", "data");
 
+        public static void SetSerializerSettings()
+        {
+            JsonConvert.DefaultSettings = () => new JsonSerializerSettings
+            {
+                ContractResolver = new CamelCasePropertyNamesContractResolver()
+            };
+
+        }
+
         // Load JSON and deserialize its content into a dictionary
         public static Dictionary<string, object> LoadFromFile(string fileName)
         {
@@ -21,7 +30,7 @@ namespace Manager.Json
                 if (!File.Exists(filePath))
                 {
                     Debug.LogWarning($"JsonManager - File not found at path: {filePath}");
-                    return null; 
+                    return null;
                 }
 
                 string jsonContent = File.ReadAllText(filePath);
@@ -39,13 +48,7 @@ namespace Manager.Json
         {
             try
             {
-                // Preserve original property names
-                JsonSerializerSettings settings = new()
-                {
-                    ContractResolver = new DefaultContractResolver()
-                };
-
-                return JsonConvert.SerializeObject(data, Formatting.None, settings);
+                return JsonConvert.SerializeObject(data, Formatting.None);
             }
             catch (Exception ex)
             {
@@ -59,11 +62,7 @@ namespace Manager.Json
         {
             try
             {
-                JsonSerializerSettings settings = new()
-                {
-                    ContractResolver = new DefaultContractResolver()
-                };
-                return JsonConvert.DeserializeObject<T>(jsonData, settings);
+                return JsonConvert.DeserializeObject<T>(jsonData);
             }
             catch (Exception ex)
             {

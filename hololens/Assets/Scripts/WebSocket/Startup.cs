@@ -13,6 +13,7 @@ public class Startup : MonoBehaviour
     void Awake()
     {
         networkManager = FindObjectOfType<NetworkManager>();
+        JsonManager.SetSerializerSettings();
     }
 
     public void OnTestButtonClicked()
