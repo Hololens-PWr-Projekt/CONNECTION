@@ -1,7 +1,3 @@
-# Avalonia Setup and Run Instructions
-
-This guide will walk you through the steps to set up and run an Avalonia application.
-
 ## Prerequisites
 
 Before you begin, make sure you have the following installed on your machine:
