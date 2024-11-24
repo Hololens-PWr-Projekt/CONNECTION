@@ -7,12 +7,12 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace client
+namespace server
 {
     public partial class MainWindow : Window
     {
         private HttpListener? _httpListener;
-        private readonly string _serverUri = "http://localhost:8080"; // Change to HTTP for WebSocket upgrade
+        private readonly string _serverUri = "http://localhost:8080/ws/hololens/"; // Change to HTTP for WebSocket upgrade
         private const int WebSocketBufferSize = 1024;
 
         public MainWindow()

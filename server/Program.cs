@@ -1,7 +1,7 @@
 ﻿using Avalonia;
 using System;
 
-namespace client;
+namespace server;
 
 class Program
 {
