@@ -2,9 +2,9 @@ using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 
-namespace client;
+namespace server;
 
-public class App : Application
+public partial class App : Application
 {
     public override void Initialize()
     {
@@ -13,10 +13,9 @@ public class App : Application
 
     public override void OnFrameworkInitializationCompleted()
     {
-        // Make sure the MainWindow is referenced properly here
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
-            desktop.MainWindow = new MainWindow();  // Ensure this is correct
+            desktop.MainWindow = new MainWindow();
         }
 
         base.OnFrameworkInitializationCompleted();
