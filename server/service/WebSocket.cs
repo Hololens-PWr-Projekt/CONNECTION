@@ -5,9 +5,9 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace Server.Manager
+namespace Server.Service
 {
-    public class WebSocketManager
+    public class WebSocketManager(Action<string> onMessageReceived, Action<string> onMessageSent, Action<Exception> onError)
     {
         private const string SERVER_URI = "http://localhost:8080/ws/hololens/";
         private const int WEBSOCKET_BUFFER_BYTES = 1024;
@@ -15,16 +15,9 @@ namespace Server.Manager
         private HttpListener? _httpListener;
         private WebSocket? _webSocket;
 
-        private readonly Action<string> _onMessageReceived;
-        private readonly Action<string> _onMessageSent;  // New callback for sending messages
-        private readonly Action<Exception> _onError;
-
-        public WebSocketManager(Action<string> onMessageReceived, Action<string> onMessageSent, Action<Exception> onError)
-        {
-            _onMessageReceived = onMessageReceived;
-            _onMessageSent = onMessageSent;  // Initialize callback
-            _onError = onError;
-        }
+        private readonly Action<string> _onMessageReceived = onMessageReceived;
+        private readonly Action<string> _onMessageSent = onMessageSent;
+        private readonly Action<Exception> _onError = onError;
 
         public void StartServer()
         {
@@ -74,8 +67,8 @@ namespace Server.Manager
                     var receivedMessage = Encoding.UTF8.GetString(buffer, 0, result.Count);
                     _onMessageReceived(receivedMessage);
 
-                    // Echo the received message back
-                    await SendMessage($"Echo: {receivedMessage}");
+                    
+                    // await SendMessage($"Echo: {receivedMessage}");
                 }
                 catch (Exception ex)
                 {
@@ -91,7 +84,6 @@ namespace Server.Manager
                 var messageBytes = Encoding.UTF8.GetBytes(message);
                 await _webSocket.SendAsync(new ArraySegment<byte>(messageBytes), WebSocketMessageType.Text, true, CancellationToken.None);
 
-                // Trigger the onMessageSent callback when the message is sent
                 _onMessageSent($"Sent: {message}");
             }
         }
