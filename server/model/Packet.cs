@@ -2,7 +2,7 @@ using System;
 using System.ComponentModel;
 using System.Reflection;
 
-namespace Model.Packet
+namespace Server.Model
 {
   [Serializable]
   public class Packet
