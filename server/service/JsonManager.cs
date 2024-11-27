@@ -25,9 +25,9 @@ namespace Server.Service
             {
                 return JsonConvert.SerializeObject(data, Formatting.None);
             }
-            catch (Exception ex)
+            catch (Exception e)
             {
-                Console.WriteLine($"Failed to serialize object. Exception: {ex.Message}");
+                Console.WriteLine($"Failed to serialize object. Exception: {e.Message}");
                 return null;
             }
         }

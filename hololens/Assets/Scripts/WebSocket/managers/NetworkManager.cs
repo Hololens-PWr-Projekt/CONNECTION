@@ -3,6 +3,7 @@ using NativeWebSocket;
 using UnityEngine;
 using Manager.Json;
 using Model.Packet;
+using System.Collections;
 
 namespace Manager.Networking
 {
@@ -19,6 +20,8 @@ namespace Manager.Networking
     {
       pendingPackets = new Dictionary<string, List<Packet>>();
       ConnectToServer();
+      // Try to reconnect to a server every 5s
+      StartCoroutine(CheckConnectionStatus());
     }
 
     async void ConnectToServer()
@@ -37,6 +40,20 @@ namespace Manager.Networking
       };
 
       await webSocket.Connect();
+    }
+
+    private IEnumerator CheckConnectionStatus()
+    {
+      while (true)
+      {
+        yield return new WaitForSeconds(5f);
+
+        if (!IsWebSocketOpen())
+        {
+          Debug.Log("NetworkManager - WebSocket not connected. Attempting to reconnect...");
+          ConnectToServer();
+        }
+      }
     }
 
     public async void SendPackets(List<Packet> packets, PacketSentCallback onPacketSent = null, AllPacketsSentCallback onAllPacketsSent = null)
