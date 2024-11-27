@@ -26,7 +26,6 @@ namespace Utils.Packets
 
                 packets.Add(new Packet(packetId, type, chunk, metadata));
             }
-
             return packets;
         }
 
@@ -66,11 +65,15 @@ namespace Utils.Packets
             List<string> chunks = new();
             int totalLength = data.Length;
 
-            for (int i = 0; i < totalLength; i += MAX_CHUNK_BYTES)
+            // Byte array for proper handling multi-byte characters
+            byte[] dataBytes = Encoding.Unicode.GetBytes(data);
+            for (int i = 0; i < dataBytes.Length; i += MAX_CHUNK_BYTES)
             {
-                int length = Math.Min(MAX_CHUNK_BYTES, totalLength - i);
-                chunks.Add(data.Substring(i, length));
+                int length = Math.Min(MAX_CHUNK_BYTES, dataBytes.Length - i);
+                string chunk = Encoding.Unicode.GetString(dataBytes, i, length);
+                chunks.Add(chunk);
             }
+
 
             return chunks;
         }
