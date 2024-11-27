@@ -17,6 +17,7 @@ public class Startup : MonoBehaviour
         JsonManager.SetSerializerSettings();
     }
 
+    // TODO dont load file into memory at once use JsonTextReader
     public void OnTestButtonClicked()
     {
         Dictionary<string, object> fileData = JsonManager.LoadFromFile("mesh_0");
