@@ -19,7 +19,7 @@ public class Startup : MonoBehaviour
 
     public void OnTestButtonClicked()
     {
-        Dictionary<string, object> fileData = JsonManager.LoadFromFile("mesh_3");
+        Dictionary<string, object> fileData = JsonManager.LoadFromFile("mesh_0");
 
         if (CanDataBeSent(fileData))
         {
