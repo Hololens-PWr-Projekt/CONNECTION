@@ -58,7 +58,12 @@ namespace Server.ViewModel
         {
             try
             {
-                _dataProcessor.ProcessPacket(message);
+                // If it's JSON, process packet (need refactor)
+                if (message.StartsWith('{'))
+                {
+                    _dataProcessor.ProcessPacket(message);
+
+                }
                 Messages += $"\nReceived: {message}";
             }
             catch (Exception ex)
