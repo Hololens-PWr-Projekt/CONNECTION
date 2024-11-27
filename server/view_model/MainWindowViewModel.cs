@@ -1,8 +1,11 @@
 using ReactiveUI;
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using Avalonia.Threading;
 using Server.Service;
 using Server.Model;
+
 
 namespace Server.ViewModel
 {
@@ -10,16 +13,10 @@ namespace Server.ViewModel
     {
         private List<Vertex> _vertices;
         private List<int> _triangles;
-        private string _messages;
         private readonly WebSocketManager _webSocketManager;
         private readonly DataProcessor _dataProcessor;
 
-        public string Messages
-        {
-            get => _messages;
-            set => this.RaiseAndSetIfChanged(ref _messages, value);
-        }
-
+        public ObservableCollection<string> Messages { get; } = [];
         public List<Vertex> Vertices
         {
             get => _vertices;
@@ -34,23 +31,24 @@ namespace Server.ViewModel
 
         public MainWindowViewModel()
         {
-            // Initialize fields
-            _vertices = new List<Vertex>();
-            _triangles = new List<int>();
-            _messages = string.Empty;
+            _vertices = [];
+            _triangles = [];
 
-            // Dependency initialization
             _dataProcessor = new DataProcessor(this);
             _webSocketManager = new WebSocketManager(OnMessageReceived, OnMessageSent, OnError);
 
-            // Start WebSocket server
+            StartWebSocketServer();
+        }
+
+        private void StartWebSocketServer()
+        {
             try
             {
                 _webSocketManager.StartServer();
             }
             catch (Exception ex)
             {
-                Messages += $"Error starting WebSocket server: {ex.Message}";
+                AppendMessage($"Error starting WebSocket server: {ex.Message}");
             }
         }
 
@@ -58,28 +56,41 @@ namespace Server.ViewModel
         {
             try
             {
-                // If it's JSON, process packet (need refactor)
-                if (message.StartsWith('{'))
+                if (IsJson(message))
                 {
                     _dataProcessor.ProcessPacket(message);
 
                 }
-                Messages += $"\nReceived: {message}";
+                AppendMessage($"\nReceived: {message}");
             }
             catch (Exception ex)
             {
-                Messages += $"\nError processing message: {ex.Message}";
+                AppendMessage($"\nError processing message: {ex.Message}");
             }
         }
 
         private void OnMessageSent(string message)
         {
-            Messages += $"\nSent: {message}";
+            AppendMessage($"\nSent: {message}");
         }
 
-        private void OnError(Exception ex)
+        private void OnError(Exception e)
         {
-            Messages += $"\nError: {ex.Message}";
+            AppendMessage($"\nError: {e.Message}");
+        }
+
+        private void AppendMessage(string message)
+        {
+            // Use Dispatcher to ensure UI thread safety
+            Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                Messages.Add(message);
+            });
+        }
+
+        private bool IsJson(string input)
+        {
+            return !string.IsNullOrWhiteSpace(input) && (input.StartsWith('{') || input.StartsWith('['));
         }
     }
 }

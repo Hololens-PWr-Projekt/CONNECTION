@@ -1,19 +1,32 @@
 using System;
 using System.Collections.Generic;
-using Newtonsoft.Json;
 using Server.ViewModel;
 using Server.Model;
 
 namespace Server.Service
 {
-    public class DataProcessor(MainWindowViewModel viewModel)
+    public class DataProcessor
     {
-        private readonly MainWindowViewModel _viewModel = viewModel;
-        private readonly Dictionary<string, List<Chunk>> _packetBuffer = [];
+        private readonly MainWindowViewModel _viewModel;
+        private readonly Dictionary<string, List<Chunk>> _chunksBuffer;
+        private readonly Dictionary<string, Action<string>> _dataHandlers;
+
+        public DataProcessor(MainWindowViewModel viewModel)
+        {
+            // Define packetType data handlers
+            _dataHandlers = new Dictionary<string, Action<string>>
+            {
+                { "vertices", ProcessVerticesData },
+                { "triangles", ProcessTrianglesData }
+            };
+
+            _viewModel = viewModel;
+            _chunksBuffer = [];
+        }
 
         public void ProcessPacket(string message)
         {
-            var packet = JsonConvert.DeserializeObject<Packet>(message);
+            var packet = JsonManager.Deserialize<Packet>(message);
 
             if (packet == null)
             {
@@ -21,13 +34,14 @@ namespace Server.Service
                 return;
             }
 
-            if (!_packetBuffer.ContainsKey(packet.PacketId))
+            if (!_chunksBuffer.ContainsKey(packet.PacketId))
             {
-                _packetBuffer[packet.PacketId] = [];
+                _chunksBuffer[packet.PacketId] = [];
             }
 
-            _packetBuffer[packet.PacketId].Add(packet.Chunk);
+            _chunksBuffer[packet.PacketId].Add(packet.Chunk);
 
+            // Reassemble if all packets have been received
             if (packet.Chunk.SequenceNumber == packet.Chunk.TotalChunks)
             {
                 ReassemblePacket(packet.PacketId, packet.PacketType);
@@ -36,54 +50,40 @@ namespace Server.Service
 
         private void ReassemblePacket(string packetId, string packetType)
         {
-            if (!_packetBuffer.TryGetValue(packetId, out var chunks))
+            if (!_chunksBuffer.TryGetValue(packetId, out var chunks))
             {
                 Console.WriteLine($"No data found for packet ID: {packetId}");
                 return;
             }
 
+            // Sort by sequence number and merge chunks data
             chunks.Sort((a, b) => a.SequenceNumber.CompareTo(b.SequenceNumber));
-            // Combine data from all chunks
-            var fullData = string.Join("", chunks.ConvertAll(chunk => chunk.Data));
-            switch (packetType)
+            var mergedData = string.Join("", chunks.ConvertAll(chunk => chunk.Data));
+            // Get rid of escaped double quotes
+            string convertedData = JsonManager.Deserialize<string>(mergedData);
 
+            if (_dataHandlers.TryGetValue(packetType, out var handler))
             {
-                case "vertices":
-                    ProcessVerticesData(fullData);
-                    break;
-
-                case "triangles":
-                    ProcessTrinaglesData(fullData);
-                    break;
+                handler(convertedData);
+            }
+            else
+            {
+                Console.WriteLine($"Unknown packet type: {packetType}");
             }
 
-            _packetBuffer.Remove(packetId);
+            _chunksBuffer.Remove(packetId);
         }
 
-        private void ProcessTrinaglesData(string data)
+        private void ProcessTrianglesData(string data)
         {
-            try
-            {
-                var triangles = JsonConvert.DeserializeObject<List<int>>(data);
-                Console.WriteLine(triangles);
-            }
-            catch (Exception e)
-            {
-                Console.WriteLine($"Error processing triangles data: {e.Message}");
-            }
+            var triangles = JsonManager.Deserialize<List<int>>(data);
+            _viewModel.Triangles = triangles;
         }
 
         private void ProcessVerticesData(string data)
         {
-            try
-            {
-                var vertices = JsonConvert.DeserializeObject<List<Vertex>>(data);
-                Console.WriteLine(vertices);
-            }
-            catch (Exception e)
-            {
-                Console.WriteLine($"Error processing vertices data: {e.Message}");
-            }
+            var vertices = JsonManager.Deserialize<List<Vertex>>(data);
+            _viewModel.Vertices = vertices;
         }
     }
 }
