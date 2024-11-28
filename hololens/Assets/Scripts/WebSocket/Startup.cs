@@ -6,6 +6,7 @@ using Manager.Networking;
 using Model.Packet;
 using Model.Vertex;
 using Utils.Packets;
+using Utils.Constants;
 
 public class Startup : MonoBehaviour
 {
@@ -22,10 +23,10 @@ public class Startup : MonoBehaviour
     {
         Dictionary<string, object> fileData = JsonManager.LoadFromFile("mesh_0");
 
-        if (CanDataBeSent(fileData))
+        if (DataCanBeSent(fileData))
         {
-            ProcessAndSendPackets<List<Vertex>>(fileData, PacketType.Vertices);
-            ProcessAndSendPackets<List<int>>(fileData, PacketType.Triangles);
+            ProcessAndSendPackets<List<Vertex>>(fileData, Constants.VERTICES);
+            ProcessAndSendPackets<List<int>>(fileData, Constants.TRIANGLES);
         }
         else
         {
@@ -33,23 +34,22 @@ public class Startup : MonoBehaviour
         }
     }
 
-    private void ProcessAndSendPackets<T>(Dictionary<string, object> fileData, PacketType type)
+    private void ProcessAndSendPackets<T>(Dictionary<string, object> fileData, string type)
     {
-        string key = PacketTypeExtensions.GetDescription(type);
-
-        if (fileData.ContainsKey(key))
+        if (fileData.ContainsKey(type))
         {
-            string dataJson = JsonManager.Serialize(fileData[key]);
+            string dataJson = JsonManager.Serialize(fileData[type]);
             var data = JsonManager.Deserialize<T>(dataJson);
+            
             SendPackets(data, type);
         }
         else
         {
-            Debug.LogWarning($"No {key} data found in the input JSON.");
+            Debug.LogWarning($"No {type} data found in the input JSON.");
         }
     }
 
-    private void SendPackets<T>(T data, PacketType type)
+    private void SendPackets<T>(T data, string type)
     {
         string serializedValue = JsonManager.Serialize(data);
         string packetId = Guid.NewGuid().ToString();
@@ -70,7 +70,7 @@ public class Startup : MonoBehaviour
     }
 
 
-    private bool CanDataBeSent(object data)
+    private bool DataCanBeSent(object data)
     {
         return data != null && networkManager != null;
     }

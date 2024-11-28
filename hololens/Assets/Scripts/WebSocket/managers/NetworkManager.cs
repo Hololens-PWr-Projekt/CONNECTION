@@ -4,15 +4,14 @@ using UnityEngine;
 using Manager.Json;
 using Model.Packet;
 using System.Collections;
+using Utils.Constants;
+using System;
 
 namespace Manager.Networking
 {
 
   public class NetworkManager : MonoBehaviour
   {
-    public delegate void PacketSentCallback(Packet packet);
-    public delegate void AllPacketsSentCallback(string packetId);
-
     private WebSocket webSocket;
     private Dictionary<string, List<Packet>> pendingPackets;
 
@@ -26,11 +25,11 @@ namespace Manager.Networking
 
     async void ConnectToServer()
     {
-      webSocket = new WebSocket("ws://localhost:8080/ws/hololens");
+      webSocket = new WebSocket(Constants.WEBSOCKET_URL);
 
-      webSocket.OnOpen += () => Debug.Log("NetworkManager - Connection open!");
-      webSocket.OnError += (e) => Debug.Log("NetworkManager - Error! " + e);
-      webSocket.OnClose += (e) => Debug.Log("NetworkManager - Connection closed!");
+      webSocket.OnOpen += () => Debug.Log("Connection open!");
+      webSocket.OnError += (e) => Debug.Log("Error! " + e);
+      webSocket.OnClose += (e) => Debug.Log("Connection closed!");
 
       // Receive data from the server
       webSocket.OnMessage += (bytes) =>
@@ -42,25 +41,11 @@ namespace Manager.Networking
       await webSocket.Connect();
     }
 
-    private IEnumerator CheckConnectionStatus()
-    {
-      while (true)
-      {
-        yield return new WaitForSeconds(5f);
-
-        if (!IsWebSocketOpen())
-        {
-          Debug.Log("NetworkManager - WebSocket not connected. Attempting to reconnect...");
-          ConnectToServer();
-        }
-      }
-    }
-
-    public async void SendPackets(List<Packet> packets, PacketSentCallback onPacketSent = null, AllPacketsSentCallback onAllPacketsSent = null)
+    public async void SendPackets(List<Packet> packets, Action<Packet> onPacketSent = null, Action<string> onAllPacketsSent = null)
     {
       if (ArePacketsEmpty(packets))
       {
-        Debug.LogWarning("NetworkManager - No packed to send.");
+        Debug.LogWarning("No packed to send.");
         return;
       }
 
@@ -75,22 +60,34 @@ namespace Manager.Networking
       {
         string packetJson = JsonManager.Serialize(packet);
 
-        if (IsWebSocketOpen())
+        if (IsWebSocketClosed())
         {
-          await webSocket.SendText(packetJson);
-          onPacketSent?.Invoke(packet);
-          pendingPackets[packetId].Remove(packet);
-
-          if (IsLastPacket(packet))
-          {
-            pendingPackets.Remove(packetId);
-            onAllPacketsSent?.Invoke(packetId);
-          }
-        }
-        else
-        {
-          Debug.LogError("NetworkManager - WebSocket is not connected! Cannot send packets!");
+          Debug.LogError("WebSocket is not connected! Cannot send packets!");
           break;
+        }
+
+        await webSocket.SendText(packetJson);
+        onPacketSent?.Invoke(packet);
+        pendingPackets[packetId].Remove(packet);
+
+        if (IsLastPacket(packet))
+        {
+          pendingPackets.Remove(packetId);
+          onAllPacketsSent?.Invoke(packetId);
+        }
+      }
+    }
+
+    private IEnumerator CheckConnectionStatus()
+    {
+      while (true)
+      {
+        yield return new WaitForSeconds(Constants.RECONNECTION_INTERVAL);
+
+        if (IsWebSocketClosed())
+        {
+          Debug.Log("WebSocket not connected. Attempting to reconnect...");
+          ConnectToServer();
         }
       }
     }
@@ -103,15 +100,15 @@ namespace Manager.Networking
 
     private async void OnApplicationQuit()
     {
-      if (IsWebSocketOpen())
+      if (!IsWebSocketClosed())
       {
         await webSocket.Close();
       }
     }
 
-    private bool IsWebSocketOpen()
+    private bool IsWebSocketClosed()
     {
-      return webSocket.State == WebSocketState.Open;
+      return webSocket.State == WebSocketState.Closed;
     }
 
     private bool ArePacketsEmpty(List<Packet> packets)
