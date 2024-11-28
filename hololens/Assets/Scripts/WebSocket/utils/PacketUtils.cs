@@ -3,14 +3,13 @@ using System.Text;
 using System.Collections.Generic;
 using Model.Packet;
 using Manager.Json;
+using Utils.Constants;
 
 namespace Utils.Packets
 {
     public static class PacketUtils
     {
-        private const int MAX_CHUNK_BYTES = 1024;
-
-        public static List<Packet> Split(string packetId, PacketType type, object payload)
+        public static List<Packet> Split(string packetId, string type, object payload)
         {
             string jsonData = JsonManager.Serialize(payload);
 
@@ -29,9 +28,11 @@ namespace Utils.Packets
 
             return packets;
         }
-        
+
         private static List<string> SplitIntoChunks(string data)
         {
+            const int MAX_CHUNK_BYTES = 1 * 1024;
+
             byte[] dataBytes = Encoding.Unicode.GetBytes(data);
             List<string> chunks = new();
             int dataLength = dataBytes.Length;

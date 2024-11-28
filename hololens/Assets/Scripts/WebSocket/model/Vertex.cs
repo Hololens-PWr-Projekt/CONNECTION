@@ -3,23 +3,23 @@ using System;
 
 namespace Model.Vertex
 {
-
     [Serializable]
     public class Vertex
     {
-        private float x;
-        private float y;
-        private float z;
+        [JsonProperty("x")]
+        public float X { get; }
+
+        [JsonProperty("y")]
+        public float Y { get; }
+
+        [JsonProperty("z")]
+        public float Z { get; }
 
         public Vertex(float x, float y, float z)
         {
-            this.x = x;
-            this.y = y;
-            this.z = z;
+            X = x;
+            Y = y;
+            Z = z;
         }
-
-        public float X { get => x; set => x = value; }
-        public float Y { get => y; set => y = value; }
-        public float Z { get => z; set => z = value; }
     }
 }
