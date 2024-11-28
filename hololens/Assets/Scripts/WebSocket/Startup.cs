@@ -1,12 +1,12 @@
-using System.Collections.Generic;
 using System;
-using UnityEngine;
+using System.Collections.Generic;
 using Manager.Json;
 using Manager.Networking;
 using Model.Packet;
 using Model.Vertex;
-using Utils.Packets;
+using UnityEngine;
 using Utils.Constants;
+using Utils.Packets;
 
 public class Startup : MonoBehaviour
 {
@@ -30,7 +30,7 @@ public class Startup : MonoBehaviour
         }
         else
         {
-            Debug.LogError($"Failed to load JSON data or NetworkManager not initialized!");
+            Debug.LogError("Failed to load JSON data or NetworkManager not initialized!");
         }
     }
 
@@ -40,7 +40,7 @@ public class Startup : MonoBehaviour
         {
             string dataJson = JsonManager.Serialize(fileData[type]);
             var data = JsonManager.Deserialize<T>(dataJson);
-            
+
             SendPackets(data, type);
         }
         else
@@ -59,16 +59,13 @@ public class Startup : MonoBehaviour
         networkManager.SendPackets(
             packets,
             onPacketSent: (Packet packet) =>
-            {
-                Debug.Log($"Packet {packet.Chunk.SequenceNumber}/{packet.Chunk.TotalChunks} sent successfully.");
-            },
+                Debug.Log(
+                    $"Packet {packet.Chunk.SequenceNumber}/{packet.Chunk.TotalChunks} sent successfully."
+                ),
             onAllPacketsSent: (string completedPacketId) =>
-            {
-                Debug.Log($"All packets sent for packetId: {completedPacketId}");
-            }
+                Debug.Log($"All packets sent for packetId: {completedPacketId}")
         );
     }
-
 
     private bool DataCanBeSent(object data)
     {

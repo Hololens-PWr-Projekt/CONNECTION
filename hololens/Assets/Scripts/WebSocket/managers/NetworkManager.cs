@@ -106,19 +106,11 @@ namespace Manager.Networking
       }
     }
 
-    private bool IsWebSocketClosed()
-    {
-      return webSocket.State == WebSocketState.Closed;
-    }
+    private bool IsWebSocketClosed() => webSocket.State == WebSocketState.Closed;
 
-    private bool ArePacketsEmpty(List<Packet> packets)
-    {
-      return packets.Count == 0;
-    }
+    private bool ArePacketsEmpty(List<Packet> packets) => packets.Count == 0;
 
-    private bool IsLastPacket(Packet packet)
-    {
-      return packet.Chunk.SequenceNumber == packet.Chunk.TotalChunks && pendingPackets[packet.PacketId].Count == 0;
-    }
+    private bool IsLastPacket(Packet packet) => packet.Chunk.SequenceNumber == packet.Chunk.TotalChunks && pendingPackets[packet.PacketId].Count == 0;
+
   }
 }
