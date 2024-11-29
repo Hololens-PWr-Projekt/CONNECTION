@@ -7,21 +7,21 @@ namespace Server.Service
 {
     public class DataProcessor
     {
-        private readonly MainWindowViewModel _viewModel;
-        private readonly Dictionary<string, List<Chunk>> _chunksBuffer;
-        private readonly Dictionary<string, Action<string>> _dataHandlers;
+        private readonly MainWindowViewModel viewModel;
+        private readonly Dictionary<string, List<Chunk>> chunksBuffer;
+        private readonly Dictionary<string, Action<string>> dataHandlers;
 
         public DataProcessor(MainWindowViewModel viewModel)
         {
-            // Define packetType data handlers
-            _dataHandlers = new Dictionary<string, Action<string>>
+            // Define data handlers for each packet type
+            dataHandlers = new Dictionary<string, Action<string>>
             {
                 { "vertices", ProcessVerticesData },
                 { "triangles", ProcessTrianglesData }
             };
 
-            _viewModel = viewModel;
-            _chunksBuffer = [];
+            this.viewModel = viewModel;
+            chunksBuffer = [];
         }
 
         public void ProcessPacket(string message)
@@ -34,12 +34,12 @@ namespace Server.Service
                 return;
             }
 
-            if (!_chunksBuffer.ContainsKey(packet.PacketId))
+            if (!chunksBuffer.TryGetValue(packet.PacketId, out var _))
             {
-                _chunksBuffer[packet.PacketId] = [];
+                chunksBuffer[packet.PacketId] = [];
             }
 
-            _chunksBuffer[packet.PacketId].Add(packet.Chunk);
+            chunksBuffer[packet.PacketId].Add(packet.Chunk);
 
             // Reassemble if all packets have been received
             if (packet.Chunk.SequenceNumber == packet.Chunk.TotalChunks)
@@ -50,7 +50,7 @@ namespace Server.Service
 
         private void ReassemblePacket(string packetId, string packetType)
         {
-            if (!_chunksBuffer.TryGetValue(packetId, out var chunks))
+            if (!chunksBuffer.TryGetValue(packetId, out var chunks))
             {
                 Console.WriteLine($"No data found for packet ID: {packetId}");
                 return;
@@ -59,10 +59,11 @@ namespace Server.Service
             // Sort by sequence number and merge chunks data
             chunks.Sort((a, b) => a.SequenceNumber.CompareTo(b.SequenceNumber));
             var mergedData = string.Join("", chunks.ConvertAll(chunk => chunk.Data));
-            // Get rid of escaped double quotes
-            string convertedData = JsonManager.Deserialize<string>(mergedData);
 
-            if (_dataHandlers.TryGetValue(packetType, out var handler))
+            // Get rid of escaped double quotes
+            var convertedData = JsonManager.Deserialize<string>(mergedData);
+
+            if (dataHandlers.TryGetValue(packetType, out var handler))
             {
                 handler(convertedData);
             }
@@ -71,19 +72,19 @@ namespace Server.Service
                 Console.WriteLine($"Unknown packet type: {packetType}");
             }
 
-            _chunksBuffer.Remove(packetId);
+            chunksBuffer.Remove(packetId);
         }
 
         private void ProcessTrianglesData(string data)
         {
             var triangles = JsonManager.Deserialize<List<int>>(data);
-            _viewModel.Triangles = triangles;
+            viewModel.Triangles = triangles;
         }
 
         private void ProcessVerticesData(string data)
         {
             var vertices = JsonManager.Deserialize<List<Vertex>>(data);
-            _viewModel.Vertices = vertices;
+            viewModel.Vertices = vertices;
         }
     }
 }

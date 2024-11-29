@@ -1,26 +1,29 @@
 using System;
-using System.Collections.Generic;
-using System.IO;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Serialization;
 
 namespace Server.Service
 {
-
     public static class JsonManager
     {
         public static void SetSerializerSettings()
         {
-            JsonConvert.DefaultSettings = () => new JsonSerializerSettings
-            {
-                ContractResolver = new CamelCasePropertyNamesContractResolver()
-            };
-
+            JsonConvert.DefaultSettings = () =>
+                new JsonSerializerSettings
+                {
+                    ContractResolver = new CamelCasePropertyNamesContractResolver(),
+                };
         }
 
         // Serialize data into JSON format, keeping original property names
         public static string Serialize<T>(T data)
         {
+            if (data == null)
+            {
+                Console.WriteLine("Failed to serialize object: data is null.");
+                return string.Empty;
+            }
+
             try
             {
                 return JsonConvert.SerializeObject(data, Formatting.None);
@@ -28,7 +31,7 @@ namespace Server.Service
             catch (Exception e)
             {
                 Console.WriteLine($"Failed to serialize object. Exception: {e.Message}");
-                return null;
+                return string.Empty;
             }
         }
 
@@ -37,12 +40,20 @@ namespace Server.Service
         {
             try
             {
-                return JsonConvert.DeserializeObject<T>(jsonData);
+                var data = JsonConvert.DeserializeObject<T>(jsonData);
+
+                if (data == null)
+                {
+                    Console.WriteLine("Failed to deserialize object: JSON data is null or empty.");
+                    return default!;
+                }
+
+                return data;
             }
             catch (Exception e)
             {
                 Console.WriteLine($"Failed to deserialize object. Exception: {e.Message}");
-                return default;
+                return default!;
             }
         }
     }
