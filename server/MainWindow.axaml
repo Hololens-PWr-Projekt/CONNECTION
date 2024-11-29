@@ -13,8 +13,8 @@
 
     <StackPanel Margin="10,10,20,10">
         <!-- Messages Section -->
-        <TextBlock Text="Messages" FontSize="16" Margin="0,0,0,10"/>
-        <ScrollViewer VerticalScrollBarVisibility="Auto" Height="150">
+        <TextBlock Text="Messages" FontSize="16" Margin="0,0,0,10" />
+        <ScrollViewer VerticalScrollBarVisibility="Auto" Height="300">
             <ItemsControl ItemsSource="{Binding Messages}">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
@@ -40,11 +40,11 @@
 
         <!-- Triangles Section -->
         <TextBlock Text="Triangles" FontSize="16" Margin="0,20,0,10"/>
-        <ScrollViewer VerticalScrollBarVisibility="Auto" Height="100">
+        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" Height="200">
             <ItemsControl ItemsSource="{Binding Triangles}">
                 <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate>
-                        <StackPanel Orientation="Horizontal" />
+                        <WrapPanel Orientation="Horizontal" />
                     </ItemsPanelTemplate>
                 </ItemsControl.ItemsPanel>
                 <ItemsControl.ItemTemplate>
