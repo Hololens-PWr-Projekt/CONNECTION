@@ -57,7 +57,7 @@ namespace Server.ViewModel
         {
             try
             {
-                if (IsValidJson(message))
+                if (message.StartsWith('{'))
                 {
                     dataProcessor.ProcessPacket(message);
                 }

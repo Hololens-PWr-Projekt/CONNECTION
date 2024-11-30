@@ -18,12 +18,16 @@ namespace Server.Model
         [JsonProperty("metadata")]
         public Metadata Metadata { get; }
 
-        public Packet(string packetId, string packetType, Chunk chunk, Metadata metadata)
+        [JsonProperty("timestamp")]
+        public DateTime Timestamp { get; }
+
+        public Packet(string packetId, string packetType, Chunk chunk, Metadata metadata, DateTime? timestamp = null)
         {
             PacketId = packetId;
             PacketType = packetType;
             Chunk = chunk;
             Metadata = metadata;
+            Timestamp = timestamp ?? DateTime.UtcNow;
         }
     }
 
@@ -42,16 +46,20 @@ namespace Server.Model
         public Chunk(int sequenceNumber, int totalChunks, string data)
         {
             if (totalChunks <= 0)
+            {
                 throw new ArgumentException(
                     "Total chunks must be greater than 0.",
                     nameof(totalChunks)
                 );
+            }
 
             if (sequenceNumber < 1 || sequenceNumber > totalChunks)
+            {
                 throw new ArgumentOutOfRangeException(
                     nameof(sequenceNumber),
                     "Sequence number must be within the range of total chunks."
                 );
+            }
 
             SequenceNumber = sequenceNumber;
             TotalChunks = totalChunks;
@@ -68,10 +76,12 @@ namespace Server.Model
         public Metadata(int chunkBytes)
         {
             if (chunkBytes <= 0)
+            {
                 throw new ArgumentException(
                     "Chunk size must be greater than 0.",
                     nameof(chunkBytes)
                 );
+            }
 
             ChunkBytes = chunkBytes;
         }
