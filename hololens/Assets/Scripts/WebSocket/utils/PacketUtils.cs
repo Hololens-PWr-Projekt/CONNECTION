@@ -3,6 +3,7 @@ using System.Text;
 using System.Collections.Generic;
 using Model.Packet;
 using Manager.Json;
+using UnityEngine;
 
 namespace Utils.Packets
 {
@@ -16,13 +17,16 @@ namespace Utils.Packets
             List<string> chunks = SplitIntoChunks(jsonData);
             int totalChunks = chunks.Count;
 
+            DateTime timestamp = DateTime.Now;
+
             for (int i = 0; i < totalChunks; i++)
             {
                 Chunk chunk = new(i + 1, totalChunks, chunks[i]);
                 int chunk_bytes = Encoding.Unicode.GetByteCount(chunks[i]);
                 Metadata metadata = new(chunk_bytes);
 
-                packets.Add(new Packet(packetId, type, chunk, metadata));
+                // Pass the timestamp to the Packet constructor
+                packets.Add(new Packet(packetId, type, chunk, metadata, timestamp));
             }
 
             return packets;
@@ -30,9 +34,11 @@ namespace Utils.Packets
 
         private static List<string> SplitIntoChunks(string data)
         {
+            // TODO: chaning 1 to other number causes deserialize error in server, problem jest przy deserializacji Packet, coś tam jest zle zakonczone
             const int MAX_CHUNK_BYTES = 1 * 1024;
 
             byte[] dataBytes = Encoding.Unicode.GetBytes(data);
+            Debug.Log(Encoding.Unicode.GetByteCount(data));
             List<string> chunks = new();
             int dataLength = dataBytes.Length;
 
