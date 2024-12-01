@@ -21,13 +21,13 @@ namespace Model.Packet
         [JsonProperty("timestamp")]
         public DateTime Timestamp { get; }
 
-        public Packet(string packetId, string packetType, Chunk chunk, Metadata metadata, DateTime? timestamp = null)
+        public Packet(string packetId, string packetType, Chunk chunk, Metadata metadata)
         {
             PacketId = packetId;
             PacketType = packetType;
             Chunk = chunk;
             Metadata = metadata;
-            Timestamp = timestamp ?? DateTime.UtcNow;
+            Timestamp = DateTime.UtcNow;
         }
     }
 
