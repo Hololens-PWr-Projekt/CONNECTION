@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
-using Server.ViewModel;
 using Server.Model;
+using Server.ViewModel;
 
 namespace Server.Service
 {
@@ -13,11 +13,11 @@ namespace Server.Service
 
         public DataProcessor(MainWindowViewModel viewModel)
         {
-            // Define data handlers for each packet type
+            // Define data handlers for each packet type 26 pumktow dloni po 6 wspolrzednych 56x6 floatow dlonie obie dlonie
             dataHandlers = new Dictionary<string, Action<string>>
             {
                 { "vertices", ProcessVerticesData },
-                { "triangles", ProcessTrianglesData }
+                { "triangles", ProcessTrianglesData },
             };
 
             this.viewModel = viewModel;
@@ -26,13 +26,15 @@ namespace Server.Service
 
         public void ProcessPacket(string message)
         {
-            var packet = JsonManager.Deserialize<Packet>(message);
+            Packet packet = JsonManager.Deserialize<Packet>(message);
 
             if (packet == null)
             {
                 Console.WriteLine("Invalid packet received!");
                 return;
             }
+
+            // Console.WriteLine("Diff: " + (DateTime.Now - packet.Timestamp).TotalMilliseconds);
 
             if (!chunksBuffer.TryGetValue(packet.PacketId, out var _))
             {

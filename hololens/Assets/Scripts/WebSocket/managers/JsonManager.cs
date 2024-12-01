@@ -7,7 +7,6 @@ using Newtonsoft.Json.Serialization;
 
 namespace Manager.Json
 {
-
     public static class JsonManager
     {
         public static void SetSerializerSettings()
@@ -16,7 +15,6 @@ namespace Manager.Json
             {
                 ContractResolver = new CamelCasePropertyNamesContractResolver()
             };
-
         }
 
         // Load JSON and deserialize its content into a dictionary
@@ -44,7 +42,7 @@ namespace Manager.Json
         }
 
         // Serialize data into JSON format, keeping original property names
-        public static string Serialize<T>(T data)
+        public static string Serialize(object data)
         {
             try
             {

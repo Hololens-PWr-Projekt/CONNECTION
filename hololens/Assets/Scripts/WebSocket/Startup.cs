@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text;
 using Manager.Json;
 using Manager.Networking;
 using Model.Packet;
@@ -25,8 +26,8 @@ public class Startup : MonoBehaviour
 
         if (DataCanBeSent(fileData))
         {
-            ProcessAndSendPackets<List<Vertex>>(fileData, Constants.VERTICES);
-            ProcessAndSendPackets<List<int>>(fileData, Constants.TRIANGLES);
+            ProcessAndSendPackets(fileData, Constants.VERTICES);
+            ProcessAndSendPackets(fileData, Constants.TRIANGLES);
         }
         else
         {
@@ -34,14 +35,19 @@ public class Startup : MonoBehaviour
         }
     }
 
-    private void ProcessAndSendPackets<T>(Dictionary<string, object> fileData, string type)
+    private void ProcessAndSendPackets(
+        Dictionary<string, object> fileData,
+        string type,
+        bool forceSplitPacket = true
+    )
     {
         if (fileData.ContainsKey(type))
         {
             string dataJson = JsonManager.Serialize(fileData[type]);
-            var data = JsonManager.Deserialize<T>(dataJson);
+            bool isMaxChunkBytesExceeded =
+                Encoding.UTF8.GetByteCount(dataJson) > Constants.MAX_CHUNK_BYTES;
 
-            SendPackets(data, type);
+            SendPackets(dataJson, type, forceSplitPacket && isMaxChunkBytesExceeded);
         }
         else
         {
@@ -49,12 +55,12 @@ public class Startup : MonoBehaviour
         }
     }
 
-    private void SendPackets<T>(T data, string type)
+    private void SendPackets(string dataJson, string type, bool splitPacket)
     {
-        string serializedValue = JsonManager.Serialize(data);
         string packetId = Guid.NewGuid().ToString();
-
-        List<Packet> packets = PacketUtils.Split(packetId, type, serializedValue);
+        List<Packet> packets = splitPacket
+            ? PacketUtils.Split(packetId, type, dataJson)
+            : PacketUtils.CreatePacket(packetId, type, dataJson);
 
         networkManager.SendPackets(
             packets,
