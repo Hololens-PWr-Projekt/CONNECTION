@@ -15,6 +15,6 @@ namespace Utils.Constants
         public const float HANDS_FRAMERATE_HZ = 60f;
 
         // MAX SIZE
-        public const int MAX_CHUNK_BYTES = 8 * 1024;
+        public const int MAX_CHUNK_BYTES = 1 * 1024 * 1024;
     }
 }

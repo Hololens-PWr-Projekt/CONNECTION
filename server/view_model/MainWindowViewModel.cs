@@ -9,6 +9,7 @@ using Server.Service;
 
 namespace Server.ViewModel
 {
+    // todo reactive ui causes lag because of so much data send
     public class MainWindowViewModel : ReactiveObject
     {
         private readonly WebSocketManager webSocketManager;
