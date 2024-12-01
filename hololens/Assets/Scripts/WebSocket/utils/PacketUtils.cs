@@ -18,15 +18,13 @@ namespace Utils.Packets
             List<string> chunks = SplitIntoChunks(jsonData);
             int totalChunks = chunks.Count;
 
-            DateTime timestamp = DateTime.Now;
-
             for (int i = 0; i < totalChunks; i++)
             {
                 Chunk chunk = new(i + 1, totalChunks, chunks[i]);
                 int chunk_bytes = Encoding.UTF8.GetByteCount(chunks[i]);
                 Metadata metadata = new(chunk_bytes);
 
-                packets.Add(new Packet(packetId, type, chunk, metadata, timestamp));
+                packets.Add(new Packet(packetId, type, chunk, metadata));
             }
 
             return packets;
@@ -36,13 +34,12 @@ namespace Utils.Packets
         {
             // Needs refactor
             List<Packet> singlePacket = new();
-            DateTime timestamp = DateTime.Now;
 
             Chunk chunk = new(1, 1, jsonData);
             int chunkBytes = Encoding.UTF8.GetByteCount(jsonData);
             Metadata metadata = new(chunkBytes);
 
-            singlePacket.Add(new Packet(packetId, type, chunk, metadata, timestamp));
+            singlePacket.Add(new Packet(packetId, type, chunk, metadata));
 
             return singlePacket;
         }
