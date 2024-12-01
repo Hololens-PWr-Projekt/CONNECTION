@@ -72,7 +72,7 @@ namespace Server.Service
 
         private async Task ReceiveMessages()
         {
-            byte[] buffer = new byte[Constants.WEBSOCKET_BUFFER_BYTES];
+            byte[] buffer = new byte[Constants.MAX_BUFFER_BYTES];
 
             while (IsConnectionOpen())
             {
@@ -88,8 +88,8 @@ namespace Server.Service
                         await CloseConnection();
                         break;
                     }
-
-                    var receivedMessage = Encoding.UTF8.GetString(buffer, 0, result.Count);
+                    
+                    string receivedMessage = Encoding.UTF8.GetString(buffer, 0, result.Count);
                     onMessageReceived(receivedMessage);
 
                     // await SendMessage($"Echo: {receivedMessage}");

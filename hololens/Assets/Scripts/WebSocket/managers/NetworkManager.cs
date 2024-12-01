@@ -6,10 +6,10 @@ using Model.Packet;
 using System.Collections;
 using Utils.Constants;
 using System;
+using System.Text;
 
 namespace Manager.Networking
 {
-
   public class NetworkManager : MonoBehaviour
   {
     private WebSocket webSocket;
@@ -29,12 +29,12 @@ namespace Manager.Networking
 
       webSocket.OnOpen += () => Debug.Log("Connection open!");
       webSocket.OnError += (e) => Debug.Log("Error! " + e);
-      webSocket.OnClose += (e) => Debug.Log("Connection closed!");
+      webSocket.OnClose += (_) => Debug.Log("Connection closed!");
 
       // Receive data from the server
       webSocket.OnMessage += (bytes) =>
       {
-        var message = System.Text.Encoding.UTF8.GetString(bytes);
+        var message = Encoding.UTF8.GetString(bytes);
         Debug.Log("Received OnMessage! (" + bytes.Length + " bytes) " + message);
       };
 
@@ -111,6 +111,5 @@ namespace Manager.Networking
     private bool ArePacketsEmpty(List<Packet> packets) => packets.Count == 0;
 
     private bool IsLastPacket(Packet packet) => packet.Chunk.SequenceNumber == packet.Chunk.TotalChunks && pendingPackets[packet.PacketId].Count == 0;
-
   }
 }
