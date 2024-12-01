@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Server.Model;
+using Server.Utils;
 using Server.ViewModel;
 
 namespace Server.Service
@@ -34,7 +35,7 @@ namespace Server.Service
                 return;
             }
 
-            // Console.WriteLine("Diff: " + (DateTime.Now - packet.Timestamp).TotalMilliseconds);
+            PacketTimeTracker.CalculateAndPrintTimeDiff(packet);
 
             if (!chunksBuffer.TryGetValue(packet.PacketId, out var _))
             {
@@ -43,7 +44,12 @@ namespace Server.Service
 
             chunksBuffer[packet.PacketId].Add(packet.Chunk);
 
-            // Reassemble if all packets have been received
+            if (packet.Chunk.TotalChunks == 1)
+            {
+                ProcessSinglePacket(packet.PacketId, packet.PacketType, packet.Chunk.Data);
+                return;
+            }
+
             if (packet.Chunk.SequenceNumber == packet.Chunk.TotalChunks)
             {
                 ReassemblePacket(packet.PacketId, packet.PacketType);
@@ -65,9 +71,14 @@ namespace Server.Service
             // Get rid of escaped double quotes
             var convertedData = JsonManager.Deserialize<string>(mergedData);
 
+            ProcessSinglePacket(packetId, packetType, convertedData);
+        }
+
+        private void ProcessSinglePacket(string packetId, string packetType, string data)
+        {
             if (dataHandlers.TryGetValue(packetType, out var handler))
             {
-                handler(convertedData);
+                handler(data);
             }
             else
             {
@@ -77,6 +88,7 @@ namespace Server.Service
             chunksBuffer.Remove(packetId);
         }
 
+        // PROCESSING MODELS
         private void ProcessTrianglesData(string data)
         {
             var triangles = JsonManager.Deserialize<List<int>>(data);
