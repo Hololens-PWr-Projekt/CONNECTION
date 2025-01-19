@@ -1,211 +1,155 @@
-using System;
-using System.Collections.Concurrent;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
+using System.Collections;
+using System.IO;
 using Hololens.Assets.Scripts.Connection.Manager;
 using Hololens.Assets.Scripts.Connection.Utils;
 using UnityEngine;
-#if ENABLE_WINMD_SUPPORT
-using Windows.Storage;
-using Windows.Storage.Search;
-#endif
 
+// TODO ChannelName based on prefix
 namespace Hololens.Assets.Scripts.Connection
 {
     public class StartupClient : MonoBehaviour
     {
         private ChannelManager _channelManager;
 
-        private ConcurrentQueue<string> _fileQueue = new ConcurrentQueue<string>();
-        private bool _isProcessFileQueueRunning = false;
+        private const string WatchFolderPath = "Assets/WatchedFiles";
+        private const string ChannelName = "mesh";
+        private const float GracePeriod = 5f;
 
-        private List<ChannelConfig> _enabledChannels;
+        private FileSystemWatcher _fileWatcher;
+        private bool _isTransmitting = false;
 
         private void Start()
         {
             _channelManager = gameObject.AddComponent<ChannelManager>();
 
-            // Create necessary directories in WATCHED_DATA_PATH
-            CreateRequiredDirectories();
-
-            SelectChannelsToEnable();
-            _ = InitChannelsAsync(); // Start initialization asynchronously
-        }
-
-#if ENABLE_WINMD_SUPPORT
-        private async void CreateRequiredDirectories()
-        {
-            try
+            if (!Directory.Exists(WatchFolderPath))
             {
-                StorageFolder watchedFolder = await StorageFolder.GetFolderFromPathAsync(
-                    AppConfig.WATCHED_DATA_PATH
-                );
-
-                // Create "mesh" and "hands" directories if they do not exist
-                await watchedFolder.CreateFolderAsync("mesh", CreationCollisionOption.OpenIfExists);
-                await watchedFolder.CreateFolderAsync(
-                    "hands",
-                    CreationCollisionOption.OpenIfExists
-                );
-
-                Debug.Log(
-                    $"Directories 'mesh' and 'hands' ensured inside: {AppConfig.WATCHED_DATA_PATH}"
-                );
+                Directory.CreateDirectory(WatchFolderPath);
+                Debug.Log($"Created watch folder: {WatchFolderPath}");
             }
-            catch (Exception ex)
+
+            StartCoroutine(InitializeAndTransmitExistingFiles());
+        }
+
+        private IEnumerator InitializeAndTransmitExistingFiles()
+        {
+            foreach (var config in AppConfig.CHANNELS_CONFIGS)
             {
-                Debug.LogError($"Error ensuring directories: {ex.Message}");
-            }
-        }
-#else
-        private void CreateRequiredDirectories()
-        {
-            Debug.LogWarning(
-                "CreateRequiredDirectories is not supported in this build configuration."
-            );
-        }
-#endif
-
-        private void SelectChannelsToEnable()
-        {
-            string input = "mesh,hands";
-            var selectedChannels = input.Split(',').Select(c => c.Trim()).ToList();
-
-            _enabledChannels = AppConfig
-                .CHANNELS_CONFIGS.Where(c => selectedChannels.Contains(c.Name))
-                .ToList();
-
-            Debug.Log("Enabled channels: " + string.Join(", ", selectedChannels));
-        }
-
-        private async Task InitChannelsAsync()
-        {
-            foreach (var config in _enabledChannels)
-            {
-                await _channelManager.AddChannelAsync(config); // Ensure AddChannel is asynchronous in UWP
+                yield return StartCoroutine(_channelManager.AddChannel(config));
             }
 
             Debug.Log("All channels have been started.");
-            StartFileWatcherAsync(AppConfig.WATCHED_DATA_PATH); // Start file watcher asynchronously
-            StartProcessFileQueueAsync(); // Start processing file queue asynchronously
 
-            await _channelManager.SendSignalAsync("mesh", true);
+            yield return StartCoroutine(TransmitExistingFiles());
+
+            StartFileWatcher(WatchFolderPath);
         }
 
-        private async void StartFileWatcherAsync(string folderPath)
+        private IEnumerator TransmitExistingFiles()
         {
-#if ENABLE_WINMD_SUPPORT
-            try
+            while (!_channelManager.IsChannelOpen(ChannelName))
             {
-                StorageFolder folder = await StorageFolder.GetFolderFromPathAsync(folderPath);
-
-                var queryOptions = new QueryOptions(CommonFileQuery.OrderByDate, new[] { ".obj" })
-                {
-                    FolderDepth = FolderDepth.Deep,
-                };
-
-                var fileQuery = folder.CreateFileQueryWithOptions(queryOptions);
-
-                // Listen for changes
-                fileQuery.ContentsChanged += async (sender, args) =>
-                {
-                    try
-                    {
-                        var queryResult = sender as StorageFileQueryResult;
-                        if (queryResult != null)
-                        {
-                            var files = await queryResult.GetFilesAsync();
-                            foreach (var file in files)
-                            {
-                                string directoryName = file
-                                    .Path.Split('\\')
-                                    .Reverse()
-                                    .Skip(1)
-                                    .First();
-                                _fileQueue.Enqueue($"{directoryName}|{file.Path}");
-                            }
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Debug.LogError($"Error during file watching: {ex.Message}");
-                    }
-                };
-
-                // Trigger an initial scan to populate files
-                var initialFiles = await fileQuery.GetFilesAsync();
-                foreach (var file in initialFiles)
-                {
-                    string directoryName = file.Path.Split('\\').Reverse().Skip(1).First();
-                    _fileQueue.Enqueue($"{directoryName}|{file.Path}");
-                }
-
-                Debug.Log($"FileWatcher started for folder: {folderPath}");
+                Debug.LogWarning($"Channel {ChannelName} is not open. Reconnecting...");
+                yield return new WaitForSeconds(5f);
             }
-            catch (Exception ex)
+
+            Debug.Log("Starting transmission of existing files...");
+            yield return StartCoroutine(_channelManager.SendSignal(ChannelName, true));
+
+            var existingFiles = Directory.GetFiles(WatchFolderPath, "*.obj");
+            foreach (var filePath in existingFiles)
             {
-                Debug.LogError($"Failed to start file watcher: {ex.Message}");
+                yield return StartCoroutine(TransmitFile(filePath));
             }
-#else
-            Debug.LogWarning("File watcher is not supported in this build configuration.");
-#endif
+
+            yield return StartCoroutine(_channelManager.SendSignal(ChannelName, false));
+
+            Debug.Log("Existing file transmission completed.");
         }
 
-        private async void StartProcessFileQueueAsync()
+        private void StartFileWatcher(string folderPath)
         {
-            if (_isProcessFileQueueRunning)
-                return;
+            _fileWatcher = new FileSystemWatcher(folderPath)
+            {
+                Filter = "*.obj",
+                NotifyFilter = NotifyFilters.FileName | NotifyFilters.CreationTime,
+                EnableRaisingEvents = true,
+            };
 
-            _isProcessFileQueueRunning = true;
+            _fileWatcher.Created += (sender, args) =>
+            {
+                Debug.Log($"New file detected: {args.FullPath}");
+                HandleNewFile(args.FullPath);
+            };
+
+            Debug.Log($"FileWatcher started for folder: {folderPath}");
+        }
+
+        private void HandleNewFile(string filePath)
+        {
+            if (!_isTransmitting)
+            {
+                _isTransmitting = true;
+                StartCoroutine(TransmitFiles());
+            }
+
+            StartCoroutine(TransmitFile(filePath));
+        }
+
+        private IEnumerator TransmitFiles()
+        {
+            while (!_channelManager.IsChannelOpen(ChannelName))
+            {
+                Debug.LogWarning($"Channel {ChannelName} is not open. Reconnecting...");
+                yield return new WaitForSeconds(5f);
+            }
+
+            Debug.Log("Starting dynamic file transmission...");
+            yield return StartCoroutine(_channelManager.SendSignal(ChannelName, true));
 
             while (true)
             {
-                if (_fileQueue.TryDequeue(out var queueItem))
+                yield return new WaitForSeconds(GracePeriod);
+
+                if (_fileWatcher == null)
                 {
-                    string[] splitData = queueItem.Split('|');
-                    string channel = splitData[0];
-                    string filePath = splitData[1];
-
-                    byte[] fileData = null;
-
-                    try
-                    {
-                        fileData = await FileProcessor.ReadFileAsync(filePath); // UWP async file reader
-                    }
-                    catch (Exception ex)
-                    {
-                        Debug.LogError($"Error reading file: {filePath}, Error: {ex.Message}");
-                        continue;
-                    }
-
-                    while (!_channelManager.IsChannelOpen(channel))
-                    {
-                        Debug.LogWarning($"Channel {channel} is not open. Reconnecting...");
-                        await Task.Delay(5000); // Async delay instead of WaitForSeconds
-                    }
-
-                    Debug.Log($"Transmitting file: {filePath} on channel: {channel}");
-                    await _channelManager.TransmitFileAsync(channel, fileData); // Ensure TransmitFile is async
-                }
-                else
-                {
-                    await Task.Delay(600); // Async delay instead of WaitForSeconds
+                    Debug.Log("No new files detected. Ending dynamic transmission...");
+                    yield return StartCoroutine(_channelManager.SendSignal(ChannelName, false));
+                    _isTransmitting = false;
+                    yield break;
                 }
             }
         }
 
-        private async void OnDestroy()
+        private IEnumerator TransmitFile(string filePath)
+        {
+            if (!File.Exists(filePath))
+            {
+                Debug.LogWarning($"File {filePath} does not exist.");
+                yield break;
+            }
+
+            Debug.Log($"Transmitting file: {filePath}");
+            yield return StartCoroutine(_channelManager.TransmitFile(ChannelName, filePath));
+        }
+
+        private void OnDestroy()
         {
             if (_channelManager != null)
             {
                 foreach (var config in AppConfig.CHANNELS_CONFIGS)
                 {
-                    await _channelManager.RemoveChannelAsync(config.Name);
+                    _channelManager.RemoveChannel(config.Name);
                 }
             }
 
-            Debug.Log("StartupClient cleanup complete.");
+            if (_fileWatcher != null)
+            {
+                _fileWatcher.EnableRaisingEvents = false;
+                _fileWatcher.Dispose();
+                _fileWatcher = null;
+                Debug.Log("FileWatcher stopped.");
+            }
         }
     }
 }
