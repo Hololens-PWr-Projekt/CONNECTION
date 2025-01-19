@@ -1,11 +1,7 @@
 {
   "dependencies": {
-<<<<<<< HEAD
     "com.github-glitchenzo.nugetforunity": "https://github.com/GlitchEnzo/NuGetForUnity.git?path=/src/NuGetForUnity",
     "com.github.messagepack-csharp": "https://github.com/MessagePack-CSharp/MessagePack-CSharp.git?path=src/MessagePack.UnityClient/Assets/Scripts/MessagePack",
-=======
-    "com.endel.nativewebsocket": "https://github.com/endel/NativeWebSocket.git#upm",
->>>>>>> 4f96d96 (Unity config files)
     "com.unity.collab-proxy": "2.5.2",
     "com.unity.feature.development": "1.0.1",
     "com.unity.nuget.newtonsoft-json": "3.2.1",
