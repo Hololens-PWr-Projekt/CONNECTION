@@ -1,166 +1,140 @@
 using System;
-using System.IO;
+using System.Buffers;
+using System.Collections;
+using System.Net.WebSockets;
+using System.Threading;
 using System.Threading.Tasks;
 using Hololens.Assets.Scripts.Connection.Model;
 using Hololens.Assets.Scripts.Connection.Utils;
 using MessagePack;
 using UnityEngine;
-#if ENABLE_WINMD_SUPPORT
-using Windows.Networking.Sockets;
-using Windows.Storage.Streams;
-#endif
 
 namespace Hololens.Assets.Scripts.Connection.Manager
 {
     public class WebSocketManager
     {
         private readonly string _endpoint;
-        private AdvancedLogger _logger;
-
-#if ENABLE_WINMD_SUPPORT
-        private StreamWebSocket _webSocket;
-        private DataWriter _dataWriter;
-        private DataReader _dataReader;
-#endif
+        private ClientWebSocket _webSocket;
+        private static readonly ArrayPool<byte> _bufferPool = ArrayPool<byte>.Shared;
 
         public WebSocketManager(string endpoint)
         {
-            string logDirectoryPath = Path.Combine(Application.persistentDataPath, "ServerWebRTC_Logs");
-            _logger = new AdvancedLogger(logDirectoryPath);
             _endpoint = endpoint;
-
-            _logger.Log($"WebSocketManager initialized with endpoint: {_endpoint}");
         }
 
-        // Connect to the WebSocket server
-        public async Task ConnectAsync()
+        public IEnumerator ConnectAsync()
         {
-#if ENABLE_WINMD_SUPPORT
-            try
-            {
-                _logger.Log($"Attempting to connect to {_endpoint}...");
-                _webSocket = new StreamWebSocket();
-                await _webSocket.ConnectAsync(new Uri(_endpoint));
-                _dataWriter = new DataWriter(_webSocket.OutputStream);
-                _dataReader = new DataReader(_webSocket.InputStream);
+            _webSocket = new ClientWebSocket();
+            var connectTask = _webSocket.ConnectAsync(new Uri(_endpoint), CancellationToken.None);
 
-                await _logger.LogAsync($"Successfully connected to {_endpoint}.");
+            while (!connectTask.IsCompleted)
+            {
+                // Wait until task is complete
+                yield return null;
             }
-            catch (Exception ex)
-            {
-                await _logger.LogAsync($"Failed to connect to {_endpoint}: {ex.ToString()}");
-                throw;
-            }
-#else
-            Debug.LogWarning("ConnectAsync is not supported outside UWP.");
-            _logger.Log("ConnectAsync called but is not supported outside UWP.");
-            await Task.CompletedTask;
-#endif
-        }
 
-        // Send a packet through the WebSocket
-        public async Task SendAsync(Packet packet)
-        {
-#if ENABLE_WINMD_SUPPORT
-            try
+            if (connectTask.Exception != null)
             {
-                _logger.Log($"Preparing to send packet: {packet.PacketId}...");
-                byte[] serializedData = MessagePackSerializer.Serialize(packet);
-                _dataWriter.WriteBytes(serializedData);
-                await _dataWriter.StoreAsync();
-                await _logger.LogAsync($"Successfully sent packet: {packet.PacketId}");
-            }
-            catch (Exception ex)
-            {
-                await _logger.LogAsync($"Error sending packet {packet.PacketId}: {ex.ToString()}");
-                throw;
-            }
-#else
-            Debug.LogWarning("SendAsync is not supported outside UWP.");
-            _logger.Log("SendAsync called but is not supported outside UWP.");
-            await Task.CompletedTask;
-#endif
-        }
-
-        // Receive a packet from the WebSocket
-        public async Task ReceiveAsync(Action<Packet> onPacketReceived)
-        {
-#if ENABLE_WINMD_SUPPORT
-            byte[] buffer = new byte[AppConfig.PACKET_BUFFER_BYTES];
-            try
-            {
-                _logger.Log("Waiting to receive a message...");
-                uint size = await _dataReader.LoadAsync((uint)buffer.Length);
-
-                if (size == 0)
-                {
-                    await _logger.LogAsync("WebSocket closed by server.");
-                    return;
-                }
-
-                _dataReader.ReadBytes(buffer);
-                Packet packet = MessagePackSerializer.Deserialize<Packet>(buffer);
-
-                _logger.Log($"Received packet: {packet.PacketId}");
-                onPacketReceived?.Invoke(packet);
-            }
-            catch (Exception ex)
-            {
-                await _logger.LogAsync($"Error receiving message: {ex.ToString()}");
-                throw;
-            }
-#else
-            Debug.LogWarning("ReceiveAsync is not supported outside UWP.");
-            _logger.Log("ReceiveAsync called but is not supported outside UWP.");
-            await Task.CompletedTask;
-#endif
-        }
-
-        // Close the WebSocket connection
-        public async Task CloseAsync()
-        {
-#if ENABLE_WINMD_SUPPORT
-            if (_webSocket != null)
-            {
-                try
-                {
-                    _logger.Log($"Closing WebSocket connection to {_endpoint}...");
-                    _dataWriter?.DetachStream();
-                    _dataWriter?.Dispose();
-                    _dataReader?.Dispose();
-                    _webSocket.Dispose();
-                    _webSocket = null;
-                    await _logger.LogAsync($"Successfully closed connection to {_endpoint}.");
-                }
-                catch (Exception ex)
-                {
-                    await _logger.LogAsync($"Error closing WebSocket connection to {_endpoint}: {ex.ToString()}");
-                    throw;
-                }
+                Debug.LogError(
+                    $"Failed to connect to {_endpoint}: {connectTask.Exception.Message}"
+                );
             }
             else
             {
-                _logger.Log("CloseAsync called but no active WebSocket connection exists.");
+                Debug.Log($"Connected to {_endpoint}");
             }
-#else
-            Debug.LogWarning("CloseAsync is not supported outside UWP.");
-            _logger.Log("CloseAsync called but is not supported outside UWP.");
-            await Task.CompletedTask;
-#endif
         }
 
-        // Check if the WebSocket is open
+        public IEnumerator SendAsync(Packet packet)
+        {
+            byte[] seralizedData = MessagePackSerializer.Serialize(packet);
+            Task sendTask = _webSocket.SendAsync(
+                new ArraySegment<byte>(seralizedData),
+                WebSocketMessageType.Binary,
+                true,
+                CancellationToken.None
+            );
+
+            while (!sendTask.IsCompleted)
+            {
+                yield return null;
+            }
+
+            if (sendTask.Exception != null)
+            {
+                Debug.LogError($"Error sending raw message: {sendTask.Exception.Message}");
+            }
+        }
+
+        public IEnumerator ReceiveAsync(Action<Packet> onPacketReceived)
+        {
+            byte[] buffer = _bufferPool.Rent(AppConfig.PACKET_BUFFER_BYTES);
+            try
+            {
+                Task<WebSocketReceiveResult> receiveTask = _webSocket.ReceiveAsync(
+                    new ArraySegment<byte>(buffer),
+                    CancellationToken.None
+                );
+
+                while (!receiveTask.IsCompleted)
+                {
+                    yield return null;
+                }
+
+                if (receiveTask.Exception != null)
+                {
+                    Debug.LogError($"Error sending raw message: {receiveTask.Exception.Message}");
+                    yield break;
+                }
+                if (receiveTask.Result.MessageType == WebSocketMessageType.Close)
+                {
+                    Debug.LogWarning("WebSocket closed by a server.");
+                    yield break;
+                }
+                Packet packet = MessagePackSerializer.Deserialize<Packet>(
+                    buffer.AsSpan(0, receiveTask.Result.Count).ToArray()
+                );
+                onPacketReceived?.Invoke(packet);
+            }
+            finally
+            {
+                _bufferPool.Return(buffer);
+            }
+        }
+
+        public IEnumerator CloseAsync()
+        {
+            if (_webSocket.State == WebSocketState.Open)
+            {
+                var closeTask = _webSocket.CloseAsync(
+                    WebSocketCloseStatus.NormalClosure,
+                    "Closing",
+                    CancellationToken.None
+                );
+
+                while (!closeTask.IsCompleted)
+                {
+                    // Wait until the task is complete
+                    yield return null;
+                }
+
+                if (closeTask.Exception != null)
+                {
+                    Debug.LogError($"Error closing connection: {closeTask.Exception.Message}");
+                }
+                else
+                {
+                    Debug.Log($"Connection to {_endpoint} closed.");
+                }
+
+                _webSocket.Dispose();
+                _webSocket = null;
+            }
+        }
+
         public bool IsWebSocketOpen()
         {
-#if ENABLE_WINMD_SUPPORT
-            bool isOpen = _webSocket != null;
-            _logger.Log($"IsWebSocketOpen called. Result: {isOpen}");
-            return isOpen;
-#else
-            Debug.LogWarning("IsWebSocketOpen is not supported outside UWP.");
-            _logger.Log("IsWebSocketOpen called but is not supported outside UWP.");
-            return false;
-#endif
+            return _webSocket.State == WebSocketState.Open;
         }
     }
 }
