@@ -1,9 +1,8 @@
 using System;
+using System.Collections;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.IO;
 using System.Threading;
-using System.Threading.Tasks;
 using Hololens.Assets.Scripts.Connection.Model;
 using Hololens.Assets.Scripts.Connection.Utils;
 using UnityEngine;
@@ -13,48 +12,37 @@ namespace Hololens.Assets.Scripts.Connection.Manager
     public class ChannelManager : MonoBehaviour
     {
         private readonly ConcurrentDictionary<string, ChannelState> _channels = new();
-        private AdvancedLogger _logger;
 
-        private void Start()
-        {
-            string logDirectoryPath = Path.Combine(
-                Application.persistentDataPath,
-                "ServerWebRTC_Logs"
-            );
-            _logger = new AdvancedLogger(logDirectoryPath);
-        }
-
-        public async Task AddChannelAsync(ChannelConfig channelConfig)
+        public IEnumerator AddChannel(ChannelConfig channelConfig)
         {
             string channelName = channelConfig.Name;
             string endpoint = channelConfig.Endpoint;
 
             if (_channels.ContainsKey(channelName))
             {
-                await _logger.LogAsync($"Channel {channelName} already exists.");
-                return;
+                Debug.Log($"Channel {channelName} has already exists.");
+                yield break;
             }
 
-            var manager = new WebSocketManager(endpoint);
-            await manager.ConnectAsync();
+            WebSocketManager manager = new(endpoint);
+            yield return StartCoroutine(manager.ConnectAsync());
 
-            var state = new ChannelState(manager);
+            ChannelState state = new(manager);
             _channels[channelName] = state;
 
-            Action<Packet> onPacketReceived = packet =>
+            Action<Packet> onPacketReceived = (packet) =>
             {
-                _logger.Log($"Received packet on channel {channelName}: {packet.PacketId}");
+                Debug.Log($"Received packet on channel {channelName}: {packet.PacketId}");
                 ProcessPacket(channelName, packet);
             };
 
-            _ = ListenForPacketsAsync(
-                manager,
-                onPacketReceived,
-                state.CancellationTokenSource.Token
+            StartCoroutine(
+                ListenForPackets(manager, onPacketReceived, state.CancellationTokenSource.Token)
             );
-            _ = ProcessQueueAsync(channelName, state.CancellationTokenSource.Token);
 
-            await _logger.LogAsync($"Channel {channelName} added and connected.");
+            StartCoroutine(ProcessQueue(channelName, state.CancellationTokenSource.Token));
+
+            Debug.Log($"Channel {channelName} added and connected.");
         }
 
         private void ProcessPacket(string channelName, Packet packet)
@@ -68,17 +56,17 @@ namespace Hololens.Assets.Scripts.Connection.Manager
                     && state.PacketsReceived.Count == packet.Chunk.TotalChunks
                 )
                 {
-                    FileProcessor.ReassembleFileAsync(channelName, state.PacketsReceived);
+                    FileProcessor.ReassembleFile(channelName, state.PacketsReceived);
                     state.PacketsReceived.Clear();
                 }
             }
             else
             {
-                _logger.Log($"Channel {channelName} is not registered.");
+                Debug.LogError($"Channel {channelName} is not registered.");
             }
         }
 
-        private async Task ListenForPacketsAsync(
+        private IEnumerator ListenForPackets(
             WebSocketManager manager,
             Action<Packet> onPacketReceived,
             CancellationToken cancellationToken
@@ -86,25 +74,17 @@ namespace Hololens.Assets.Scripts.Connection.Manager
         {
             while (!cancellationToken.IsCancellationRequested)
             {
-                try
-                {
-                    await manager.ReceiveAsync(onPacketReceived);
-                }
-                catch (Exception ex)
-                {
-                    await _logger.LogAsync($"Error listening for packets: {ex.ToString()}");
-                    break;
-                }
+                yield return StartCoroutine(manager.ReceiveAsync(onPacketReceived));
             }
         }
 
-        public async Task RemoveChannelAsync(string channelName)
+        public void RemoveChannel(string channelName)
         {
             if (_channels.TryRemove(channelName, out var state))
             {
                 state.CancellationTokenSource?.Cancel();
-                await state.Manager.CloseAsync();
-                await _logger.LogAsync($"Channel {channelName} removed.");
+                StartCoroutine(state.Manager.CloseAsync());
+                Debug.Log($"Channel {channelName} removed.");
             }
         }
 
@@ -116,89 +96,93 @@ namespace Hololens.Assets.Scripts.Connection.Manager
             }
             else
             {
-                _logger.Log($"Channel {channelName} is not registered.");
+                Debug.LogError($"Channel {channelName} is not registered.");
             }
         }
 
-        private async Task ProcessQueueAsync(
-            string channelName,
-            CancellationToken cancellationToken
-        )
+        private IEnumerator ProcessQueue(string channelName, CancellationToken cancellationToken)
         {
             if (!_channels.TryGetValue(channelName, out var state))
             {
-                await _logger.LogAsync($"Channel {channelName} is not registered.");
-                return;
+                Debug.LogError($"Channel {channelName} is not registered.");
+                yield break;
             }
 
             while (!cancellationToken.IsCancellationRequested)
             {
                 if (state.PacketQueue.TryDequeue(out var packet))
                 {
-                    await state.Manager.SendAsync(packet);
+                    yield return StartCoroutine(state.Manager.SendAsync(packet));
+                    // Debug.Log(
+                    //     $"Packet {packet.Chunk.SequenceNumber + 1}/{packet.Chunk.TotalChunks} send on channel {channelName}"
+                    // );
                 }
                 else
                 {
-                    await Task.Delay(100);
+                    yield return new WaitForSeconds(0.1f);
                 }
             }
         }
 
-        public async Task TransmitFileAsync(string channelName, byte[] data)
+        public IEnumerator TransmitFile(string channelName, string filePath)
         {
-            if (!_channels.TryGetValue(channelName, out var _))
+            if (!_channels.TryGetValue(channelName, out var state))
             {
-                await _logger.LogAsync($"Channel {channelName} is not registered.");
-                return;
+                Debug.LogError($"Channel {channelName} is not registered.");
+                yield break;
             }
 
-            var packets = await FileProcessor.SplitFileAsync(channelName, data);
+            var packets = FileProcessor.SplitFile(channelName, filePath);
 
             foreach (var packet in packets)
             {
                 EnqueuePacket(channelName, packet);
-                await Task.Yield();
+                yield return null;
             }
 
-            await _logger.LogAsync($"File transmission completed for channel {channelName}");
+            Debug.Log($"File transmission completed for channel {channelName}");
         }
 
-        public async Task SendSignalAsync(string channelName, bool start)
+        public IEnumerator SendSignal(string channelName, bool start)
         {
             string signal = start ? "start" : "stop";
 
             if (_channels.TryGetValue(channelName, out var state))
             {
-                var signalPacket = new Packet(
+                Packet signalPacket = new(
                     signal,
                     (Channel)Enum.Parse(typeof(Channel), channelName, true),
                     new Chunk(1, 1, new byte[1])
                 );
-                await state.Manager.SendAsync(signalPacket);
-                await _logger.LogAsync($"{signal} signal sent for channel {channelName}");
+                yield return StartCoroutine(state.Manager.SendAsync(signalPacket));
+                Debug.Log($"{signal} signal sent for channel {channelName}");
             }
             else
             {
-                await _logger.LogAsync($"Channel {channelName} is not registered.");
+                Debug.LogError($"Channel {channelName} is not registered.");
             }
         }
 
         public bool IsChannelOpen(string channelName)
         {
-            return _channels.TryGetValue(channelName, out var state)
-                && state.Manager.IsWebSocketOpen();
+            if (_channels.TryGetValue(channelName, out var state))
+            {
+                return state.Manager.IsWebSocketOpen();
+            }
+
+            return false;
         }
 
-        private async void OnDestroy()
+        private void OnDestroy()
         {
-            await _logger.LogAsync("ChannelManager is being destroyed and cleaning resources...");
+            Debug.Log("ChannelManager is being destroyed and is cleaning resources...");
 
             foreach (var channelName in _channels.Keys)
             {
-                await RemoveChannelAsync(channelName);
+                RemoveChannel(channelName);
             }
 
-            await _logger.LogAsync(("ChannelManager cleanup complete."));
+            Debug.Log("ChannelManager cleanup complete.");
         }
     }
 
@@ -206,9 +190,11 @@ namespace Hololens.Assets.Scripts.Connection.Manager
     {
         public WebSocketManager Manager { get; }
         public ConcurrentQueue<Packet> PacketQueue { get; }
-        public CancellationTokenSource CancellationTokenSource { get; }
+#nullable enable
+        public CancellationTokenSource? CancellationTokenSource { get; }
         public List<Packet> PacketsReceived { get; }
 
+#nullable disable
         public ChannelState(WebSocketManager manager)
         {
             Manager = manager;
