@@ -6,8 +6,10 @@ using System.Threading.Tasks;
 using Hololens.Assets.Scripts.Connection.Manager;
 using Hololens.Assets.Scripts.Connection.Utils;
 using UnityEngine;
+#if ENABLE_WINMD_SUPPORT
 using Windows.Storage;
 using Windows.Storage.Search;
+#endif
 
 namespace Hololens.Assets.Scripts.Connection
 {
@@ -31,6 +33,7 @@ namespace Hololens.Assets.Scripts.Connection
             _ = InitChannelsAsync(); // Start initialization asynchronously
         }
 
+#if ENABLE_WINMD_SUPPORT
         private async void CreateRequiredDirectories()
         {
             try
@@ -55,6 +58,14 @@ namespace Hololens.Assets.Scripts.Connection
                 Debug.LogError($"Error ensuring directories: {ex.Message}");
             }
         }
+#else
+        private void CreateRequiredDirectories()
+        {
+            Debug.LogWarning(
+                "CreateRequiredDirectories is not supported in this build configuration."
+            );
+        }
+#endif
 
         private void SelectChannelsToEnable()
         {
@@ -72,16 +83,17 @@ namespace Hololens.Assets.Scripts.Connection
         {
             foreach (var config in _enabledChannels)
             {
-                await _channelManager.AddChannel(config); // Ensure AddChannel is asynchronous in UWP
+                await _channelManager.AddChannelAsync(config); // Ensure AddChannel is asynchronous in UWP
             }
 
             Debug.Log("All channels have been started.");
-            _ = StartFileWatcherAsync(AppConfig.WATCHED_DATA_PATH); // Start file watcher asynchronously
-            _ = StartProcessFileQueueAsync(); // Start processing file queue asynchronously
+            StartFileWatcherAsync(AppConfig.WATCHED_DATA_PATH); // Start file watcher asynchronously
+            StartProcessFileQueueAsync(); // Start processing file queue asynchronously
 
-            await _channelManager.SendSignal("mesh", true);
+            await _channelManager.SendSignalAsync("mesh", true);
         }
 
+#if ENABLE_WINMD_SUPPORT
         private async void StartFileWatcherAsync(string folderPath)
         {
             try
@@ -122,6 +134,12 @@ namespace Hololens.Assets.Scripts.Connection
                 Debug.LogError($"Failed to start file watcher: {ex.Message}");
             }
         }
+#else
+        private void StartFileWatcherAsync(string folderPath)
+        {
+            Debug.LogWarning("StartFileWatcherAsync is not supported in this build configuration.");
+        }
+#endif
 
         private async void StartProcessFileQueueAsync()
         {
@@ -142,7 +160,10 @@ namespace Hololens.Assets.Scripts.Connection
 
                     try
                     {
+#if ENABLE_WINMD_SUPPORT
                         fileData = await FileProcessor.ReadFileAsync(filePath); // UWP async file reader
+#endif
+                        fileData = FileProcessor.ReadFile(filePath); // UWP async file reader
                     }
                     catch (Exception ex)
                     {
@@ -157,7 +178,7 @@ namespace Hololens.Assets.Scripts.Connection
                     }
 
                     Debug.Log($"Transmitting file: {filePath} on channel: {channel}");
-                    await _channelManager.TransmitFile(channel, fileData); // Ensure TransmitFile is async
+                    await _channelManager.TransmitFileAsync(channel, fileData); // Ensure TransmitFile is async
                 }
                 else
                 {
@@ -166,13 +187,13 @@ namespace Hololens.Assets.Scripts.Connection
             }
         }
 
-        private void OnDestroy()
+        private async void OnDestroy()
         {
             if (_channelManager != null)
             {
                 foreach (var config in AppConfig.CHANNELS_CONFIGS)
                 {
-                    _channelManager.RemoveChannel(config.Name);
+                    await _channelManager.RemoveChannelAsync(config.Name);
                 }
             }
 

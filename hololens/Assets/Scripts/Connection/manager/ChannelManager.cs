@@ -1,12 +1,10 @@
 using System;
-using System.Collections;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Hololens.Assets.Scripts.Connection.Model;
 using Hololens.Assets.Scripts.Connection.Utils;
-using Unity.VisualScripting;
 using UnityEngine;
 
 namespace Hololens.Assets.Scripts.Connection.Manager
@@ -15,7 +13,7 @@ namespace Hololens.Assets.Scripts.Connection.Manager
     {
         private readonly ConcurrentDictionary<string, ChannelState> _channels = new();
 
-        public async void AddChannel(ChannelConfig channelConfig)
+        public async Task AddChannelAsync(ChannelConfig channelConfig)
         {
             string channelName = channelConfig.Name;
             string endpoint = channelConfig.Endpoint;
@@ -26,24 +24,29 @@ namespace Hololens.Assets.Scripts.Connection.Manager
                 return;
             }
 
-            WebSocketManager manager = new(endpoint);
+            var manager = new WebSocketManager(endpoint);
             await manager.ConnectAsync();
 
-            ChannelState state = new(manager);
+            var state = new ChannelState(manager);
             _channels[channelName] = state;
 
-            Action<Packet> onPacketReceived = (packet) =>
+            Action<Packet> onPacketReceived = packet =>
             {
                 Debug.Log($"Received packet on channel {channelName}: {packet.PacketId}");
                 ProcessPacket(channelName, packet);
             };
 
-            ProcessQueue(channelName, state.CancellationTokenSource.Token);
+            _ = ListenForPacketsAsync(
+                manager,
+                onPacketReceived,
+                state.CancellationTokenSource.Token
+            );
+            _ = ProcessQueueAsync(channelName, state.CancellationTokenSource.Token);
 
             Debug.Log($"Channel {channelName} added and connected.");
         }
 
-        private async void ProcessPacket(string channelName, Packet packet)
+        private void ProcessPacket(string channelName, Packet packet)
         {
             if (_channels.TryGetValue(channelName, out var state))
             {
@@ -54,7 +57,7 @@ namespace Hololens.Assets.Scripts.Connection.Manager
                     && state.PacketsReceived.Count == packet.Chunk.TotalChunks
                 )
                 {
-                    await FileProcessor.ReassembleFileAsync(channelName, state.PacketsReceived);
+                    FileProcessor.ReassembleFileAsync(channelName, state.PacketsReceived);
                     state.PacketsReceived.Clear();
                 }
             }
@@ -64,7 +67,27 @@ namespace Hololens.Assets.Scripts.Connection.Manager
             }
         }
 
-        public async void RemoveChannel(string channelName)
+        private async Task ListenForPacketsAsync(
+            WebSocketManager manager,
+            Action<Packet> onPacketReceived,
+            CancellationToken cancellationToken
+        )
+        {
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                try
+                {
+                    await manager.ReceiveAsync(onPacketReceived);
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogError($"Error listening for packets: {ex.Message}");
+                    break;
+                }
+            }
+        }
+
+        public async Task RemoveChannelAsync(string channelName)
         {
             if (_channels.TryRemove(channelName, out var state))
             {
@@ -86,7 +109,10 @@ namespace Hololens.Assets.Scripts.Connection.Manager
             }
         }
 
-        private async void ProcessQueue(string channelName, CancellationToken cancellationToken)
+        private async Task ProcessQueueAsync(
+            string channelName,
+            CancellationToken cancellationToken
+        )
         {
             if (!_channels.TryGetValue(channelName, out var state))
             {
@@ -102,45 +128,43 @@ namespace Hololens.Assets.Scripts.Connection.Manager
                 }
                 else
                 {
-                    await Task.Delay(600);
+                    await Task.Delay(100);
                 }
             }
-
-            Debug.Log($"Stopped processing queue for channel {channelName} due to cancellation.");
         }
 
-        public IEnumerator TransmitFile(string channelName, byte[] data)
+        public async Task TransmitFileAsync(string channelName, byte[] data)
         {
             if (!_channels.TryGetValue(channelName, out var _))
             {
                 Debug.LogError($"Channel {channelName} is not registered.");
-                yield break;
+                return;
             }
 
-            var packets = FileProcessor.SplitFile(channelName, data);
+            var packets = await FileProcessor.SplitFileAsync(channelName, data);
 
             foreach (var packet in packets)
             {
                 EnqueuePacket(channelName, packet);
-                yield return null;
+                await Task.Yield();
             }
 
-            Debug.Log($"File transmission completed for channel {channelName}.");
+            Debug.Log($"File transmission completed for channel {channelName}");
         }
 
-        public async void SendSignal(string channelName, bool start)
+        public async Task SendSignalAsync(string channelName, bool start)
         {
             string signal = start ? "start" : "stop";
 
             if (_channels.TryGetValue(channelName, out var state))
             {
-                Packet signalPacket = new(
+                var signalPacket = new Packet(
                     signal,
                     (Channel)Enum.Parse(typeof(Channel), channelName, true),
                     new Chunk(1, 1, new byte[1])
                 );
                 await state.Manager.SendAsync(signalPacket);
-                Debug.Log($"{signal} signal sent for channel {channelName}.");
+                Debug.Log($"{signal} signal sent for channel {channelName}");
             }
             else
             {
@@ -150,21 +174,17 @@ namespace Hololens.Assets.Scripts.Connection.Manager
 
         public bool IsChannelOpen(string channelName)
         {
-            if (_channels.TryGetValue(channelName, out var state))
-            {
-                return state.Manager.IsWebSocketOpen();
-            }
-
-            return false;
+            return _channels.TryGetValue(channelName, out var state)
+                && state.Manager.IsWebSocketOpen();
         }
 
-        private void OnDestroy()
+        private async void OnDestroy()
         {
             Debug.Log("ChannelManager is being destroyed and cleaning resources...");
 
             foreach (var channelName in _channels.Keys)
             {
-                RemoveChannel(channelName);
+                await RemoveChannelAsync(channelName);
             }
 
             Debug.Log("ChannelManager cleanup complete.");
