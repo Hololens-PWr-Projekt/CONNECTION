@@ -18,9 +18,8 @@ namespace Hololens.Assets.Scripts.Connection.Utils
             return File.ReadAllBytes(filePath);
         }
 
-        public static IEnumerable<Packet> SplitFile(string channelName, string filePath)
+        public static IEnumerable<Packet> SplitFile(string channelName, byte[] data)
         {
-            byte[] data = ReadFile(filePath);
             int totalChunks = (int)Math.Ceiling((double)data.Length / AppConfig.CHUNK_BUFFER_SIZE);
             List<Packet> packets = new();
 

@@ -124,15 +124,15 @@ namespace Hololens.Assets.Scripts.Connection.Manager
             }
         }
 
-        public IEnumerator TransmitFile(string channelName, string filePath)
+        public IEnumerator TransmitFile(string channelName, byte[] data)
         {
-            if (!_channels.TryGetValue(channelName, out var state))
+            if (!_channels.TryGetValue(channelName, out var _))
             {
                 Debug.LogError($"Channel {channelName} is not registered.");
                 yield break;
             }
 
-            var packets = FileProcessor.SplitFile(channelName, filePath);
+            var packets = FileProcessor.SplitFile(channelName, data);
 
             foreach (var packet in packets)
             {
