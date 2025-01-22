@@ -1,70 +1,65 @@
 using System.Collections;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using Hololens.Assets.Scripts.Connection.Manager;
 using Hololens.Assets.Scripts.Connection.Utils;
 using UnityEngine;
 
-// TODO ChannelName based on prefix
 namespace Hololens.Assets.Scripts.Connection
 {
     public class StartupClient : MonoBehaviour
     {
         private ChannelManager _channelManager;
 
-        private const string WatchFolderPath = "Assets/WatchedFiles";
-        private const string ChannelName = "mesh";
-        private const float GracePeriod = 5f;
-
         private FileSystemWatcher _fileWatcher;
-        private bool _isTransmitting = false;
+        private List<ChannelConfig> _enabledChannels;
+        private ConcurrentQueue<string> _fileQueue = new ConcurrentQueue<string>();
+        private bool _isProcessFileQueueRunning = false;
+
+        private float _timeSinceLastFile = 0f;
 
         private void Start()
         {
             _channelManager = gameObject.AddComponent<ChannelManager>();
 
-            if (!Directory.Exists(WatchFolderPath))
+            if (!Directory.Exists(AppConfig.WATCHED_DATA_PATH))
             {
-                Directory.CreateDirectory(WatchFolderPath);
-                Debug.Log($"Created watch folder: {WatchFolderPath}");
+                Directory.CreateDirectory(AppConfig.WATCHED_DATA_PATH);
+                Debug.Log($"Created watch folder: {AppConfig.WATCHED_DATA_PATH}");
             }
 
-            StartCoroutine(InitializeAndTransmitExistingFiles());
+            SelectChannelsToEnable();
+            StartCoroutine(InitChannels());
         }
 
-        private IEnumerator InitializeAndTransmitExistingFiles()
+        private void SelectChannelsToEnable()
         {
-            foreach (var config in AppConfig.CHANNELS_CONFIGS)
+            string input = "mesh,hands";
+            var selectedChannels = input.Split(',').Select(c => c.Trim()).ToList();
+
+            _enabledChannels = AppConfig
+                .CHANNELS_CONFIGS.Where(c => selectedChannels.Contains(c.Name))
+                .ToList();
+
+            Debug.Log("Enabled channels: " + string.Join(", ", selectedChannels));
+        }
+
+        private IEnumerator InitChannels()
+        {
+            foreach (var config in _enabledChannels)
             {
                 yield return StartCoroutine(_channelManager.AddChannel(config));
             }
 
             Debug.Log("All channels have been started.");
+            StartFileWatcher(AppConfig.WATCHED_DATA_PATH);
 
-            yield return StartCoroutine(TransmitExistingFiles());
+            // Start the global file processing coroutine
+            StartGlobalProcessFileQueue();
 
-            StartFileWatcher(WatchFolderPath);
-        }
-
-        private IEnumerator TransmitExistingFiles()
-        {
-            while (!_channelManager.IsChannelOpen(ChannelName))
-            {
-                Debug.LogWarning($"Channel {ChannelName} is not open. Reconnecting...");
-                yield return new WaitForSeconds(5f);
-            }
-
-            Debug.Log("Starting transmission of existing files...");
-            yield return StartCoroutine(_channelManager.SendSignal(ChannelName, true));
-
-            var existingFiles = Directory.GetFiles(WatchFolderPath, "*.obj");
-            foreach (var filePath in existingFiles)
-            {
-                yield return StartCoroutine(TransmitFile(filePath));
-            }
-
-            yield return StartCoroutine(_channelManager.SendSignal(ChannelName, false));
-
-            Debug.Log("Existing file transmission completed.");
+            yield return StartCoroutine(_channelManager.SendSignal("mesh", true));
         }
 
         private void StartFileWatcher(string folderPath)
@@ -73,64 +68,90 @@ namespace Hololens.Assets.Scripts.Connection
             {
                 Filter = "*.obj",
                 NotifyFilter = NotifyFilters.FileName | NotifyFilters.CreationTime,
+                IncludeSubdirectories = true, // Watch subdirectories for mesh and hands
                 EnableRaisingEvents = true,
             };
 
-            _fileWatcher.Created += (sender, args) =>
-            {
-                Debug.Log($"New file detected: {args.FullPath}");
-                HandleNewFile(args.FullPath);
-            };
-
-            Debug.Log($"FileWatcher started for folder: {folderPath}");
+            _fileWatcher.Created += OnFileCreated;
+            Debug.Log(
+                $"FileWatcher started for folder: {folderPath} with IncludeSubdirectories: {_fileWatcher.IncludeSubdirectories}"
+            );
         }
 
-        private void HandleNewFile(string filePath)
+        private void OnFileCreated(object sender, FileSystemEventArgs e)
         {
-            if (!_isTransmitting)
-            {
-                _isTransmitting = true;
-                StartCoroutine(TransmitFiles());
-            }
-
-            StartCoroutine(TransmitFile(filePath));
+            string directoryName = new DirectoryInfo(Path.GetDirectoryName(e.FullPath)).Name;
+            _fileQueue.Enqueue($"{directoryName}|{e.FullPath}");
         }
 
-        private IEnumerator TransmitFiles()
+        private void StartGlobalProcessFileQueue()
         {
-            while (!_channelManager.IsChannelOpen(ChannelName))
+            if (!_isProcessFileQueueRunning)
             {
-                Debug.LogWarning($"Channel {ChannelName} is not open. Reconnecting...");
-                yield return new WaitForSeconds(5f);
+                _isProcessFileQueueRunning = true;
+                StartCoroutine(ProcessFileQueue());
             }
+        }
 
-            Debug.Log("Starting dynamic file transmission...");
-            yield return StartCoroutine(_channelManager.SendSignal(ChannelName, true));
-
+        private IEnumerator ProcessFileQueue()
+        {
             while (true)
             {
-                yield return new WaitForSeconds(GracePeriod);
-
-                if (_fileWatcher == null)
+                if (_fileQueue.TryDequeue(out var queueItem))
                 {
-                    Debug.Log("No new files detected. Ending dynamic transmission...");
-                    yield return StartCoroutine(_channelManager.SendSignal(ChannelName, false));
-                    _isTransmitting = false;
-                    yield break;
+                    _timeSinceLastFile = 0f; // Reset the grace period timer
+
+                    string[] splitData = queueItem.Split('|');
+                    string channel = splitData[0];
+                    string filePath = splitData[1];
+
+                    byte[] fileData = File.ReadAllBytes(filePath);
+
+                    while (!_channelManager.IsChannelOpen(channel))
+                    {
+                        Debug.LogWarning($"Channel {channel} is not open. Reconnecting...");
+                        yield return new WaitForSeconds(5f);
+                    }
+
+                    Debug.Log($"Transmitting file: {filePath} on channel: {channel}");
+                    yield return StartCoroutine(_channelManager.TransmitFile(channel, fileData));
+                }
+                else
+                {
+                    // TDOO FOR TESTING PURPOSES
+                    // _timeSinceLastFile += 0.6f;
+
+                    // if (_timeSinceLastFile >= AppConfig.GRACE_PERIOD)
+                    // {
+                    //     Debug.Log($"Grace period elapsed. Sending signal on channel: mesh");
+                    //     yield return new WaitForSeconds(4f); // wait for trnsmission
+                    //     yield return StartCoroutine(_channelManager.SendSignal("mesh", false));
+
+                    //     _timeSinceLastFile = 0f; // Reset timer after sending signal
+                    // }
+
+                    yield return new WaitForSeconds(0.6f);
                 }
             }
         }
 
-        private IEnumerator TransmitFile(string filePath)
+        private void DeleteAllObjFiles()
         {
-            if (!File.Exists(filePath))
+            Debug.Log("Deleting all .obj and .meta files in watched folder...");
+            var filesToDelete = Directory
+                .GetFiles(AppConfig.WATCHED_DATA_PATH + "/mesh", "*.*", SearchOption.AllDirectories)
+                .Where(file => file.EndsWith(".obj") || file.EndsWith(".meta"));
+            foreach (var filePath in filesToDelete)
             {
-                Debug.LogWarning($"File {filePath} does not exist.");
-                yield break;
+                try
+                {
+                    File.Delete(filePath);
+                }
+                catch (IOException ex)
+                {
+                    Debug.LogError($"Failed to delete {filePath}: {ex.Message}");
+                }
             }
-
-            Debug.Log($"Transmitting file: {filePath}");
-            yield return StartCoroutine(_channelManager.TransmitFile(ChannelName, filePath));
         }
 
         private void OnDestroy()
@@ -145,11 +166,14 @@ namespace Hololens.Assets.Scripts.Connection
 
             if (_fileWatcher != null)
             {
+                _fileWatcher.Created -= OnFileCreated; // Remove the event handler
                 _fileWatcher.EnableRaisingEvents = false;
                 _fileWatcher.Dispose();
                 _fileWatcher = null;
                 Debug.Log("FileWatcher stopped.");
             }
+
+            DeleteAllObjFiles();
         }
     }
 }
