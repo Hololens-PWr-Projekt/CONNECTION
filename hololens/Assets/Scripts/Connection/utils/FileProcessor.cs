@@ -110,10 +110,10 @@ namespace Hololens.Assets.Scripts.Connection.Utils
             Debug.Log($"Reassembled file saved at: {file.Path}");
         }
 #else
-        public static byte[] ReadFile(string filePath)
+        public static async Task<byte[]> ReadFileAsync(string filePath)
         {
             Debug.LogWarning("ReadFileAsync is not supported in this build configuration.");
-            return Array.Empty<byte>();
+            return await Task.FromResult(Array.Empty<byte>());
         }
 
         public static Task<IEnumerable<Packet>> SplitFileAsync(string channelName, byte[] data)
