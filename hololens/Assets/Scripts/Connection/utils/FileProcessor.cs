@@ -68,7 +68,7 @@ namespace Hololens.Assets.Scripts.Connection.Utils
                     }
 
                     byte[] chunkData = new byte[adjustedSize];
-                    Buffer.BlockCopy(data, processedBytes, chunkData, 0, adjustedSize);
+                    System.Buffer.BlockCopy(data, processedBytes, chunkData, 0, adjustedSize);
 
                     var packet = new Packet(
                         CompactGenerator.GeneratePacketId(),

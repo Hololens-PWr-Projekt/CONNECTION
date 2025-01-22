@@ -93,30 +93,38 @@ namespace Hololens.Assets.Scripts.Connection
             await _channelManager.SendSignalAsync("mesh", true);
         }
 
-#if ENABLE_WINMD_SUPPORT
         private async void StartFileWatcherAsync(string folderPath)
         {
+#if ENABLE_WINMD_SUPPORT
             try
             {
-                StorageFolder storageFolder = await StorageFolder.GetFolderFromPathAsync(
-                    folderPath
-                );
+                StorageFolder folder = await StorageFolder.GetFolderFromPathAsync(folderPath);
 
                 var queryOptions = new QueryOptions(CommonFileQuery.OrderByDate, new[] { ".obj" })
                 {
                     FolderDepth = FolderDepth.Deep,
                 };
 
-                var fileQuery = storageFolder.CreateFileQueryWithOptions(queryOptions);
+                var fileQuery = folder.CreateFileQueryWithOptions(queryOptions);
+
+                // Listen for changes
                 fileQuery.ContentsChanged += async (sender, args) =>
                 {
                     try
                     {
-                        var files = await sender.GetFilesAsync();
-                        foreach (var file in files)
+                        var queryResult = sender as StorageFileQueryResult;
+                        if (queryResult != null)
                         {
-                            string directoryName = file.Path.Split('\\').Reverse().Skip(1).First();
-                            _fileQueue.Enqueue($"{directoryName}|{file.Path}");
+                            var files = await queryResult.GetFilesAsync();
+                            foreach (var file in files)
+                            {
+                                string directoryName = file
+                                    .Path.Split('\\')
+                                    .Reverse()
+                                    .Skip(1)
+                                    .First();
+                                _fileQueue.Enqueue($"{directoryName}|{file.Path}");
+                            }
                         }
                     }
                     catch (Exception ex)
@@ -125,21 +133,24 @@ namespace Hololens.Assets.Scripts.Connection
                     }
                 };
 
-                // Trigger an initial scan
-                await fileQuery.GetFilesAsync();
+                // Trigger an initial scan to populate files
+                var initialFiles = await fileQuery.GetFilesAsync();
+                foreach (var file in initialFiles)
+                {
+                    string directoryName = file.Path.Split('\\').Reverse().Skip(1).First();
+                    _fileQueue.Enqueue($"{directoryName}|{file.Path}");
+                }
+
                 Debug.Log($"FileWatcher started for folder: {folderPath}");
             }
             catch (Exception ex)
             {
                 Debug.LogError($"Failed to start file watcher: {ex.Message}");
             }
-        }
 #else
-        private void StartFileWatcherAsync(string folderPath)
-        {
-            Debug.LogWarning("StartFileWatcherAsync is not supported in this build configuration.");
-        }
+            Debug.LogWarning("File watcher is not supported in this build configuration.");
 #endif
+        }
 
         private async void StartProcessFileQueueAsync()
         {
@@ -160,10 +171,7 @@ namespace Hololens.Assets.Scripts.Connection
 
                     try
                     {
-#if ENABLE_WINMD_SUPPORT
                         fileData = await FileProcessor.ReadFileAsync(filePath); // UWP async file reader
-#endif
-                        fileData = FileProcessor.ReadFile(filePath); // UWP async file reader
                     }
                     catch (Exception ex)
                     {

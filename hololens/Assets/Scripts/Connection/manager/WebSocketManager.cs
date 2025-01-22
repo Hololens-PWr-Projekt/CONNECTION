@@ -1,6 +1,7 @@
 using System;
 using System.Threading.Tasks;
 using Hololens.Assets.Scripts.Connection.Model;
+using MessagePack;
 using UnityEngine;
 #if ENABLE_WINMD_SUPPORT
 using Windows.Networking.Sockets;
