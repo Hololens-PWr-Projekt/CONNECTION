@@ -1,16 +1,13 @@
 using System;
-using System.Collections;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using Hololens.Assets.Scripts.Connection.Manager;
 using Hololens.Assets.Scripts.Connection.Utils;
 using UnityEngine;
-#if WINDOWS_UWP
 using Windows.Storage;
-using Windows.Foundation;
-using System.Threading.Tasks;
-#endif
+using Windows.Storage.Search;
 
 namespace Hololens.Assets.Scripts.Connection
 {
@@ -27,76 +24,37 @@ namespace Hololens.Assets.Scripts.Connection
         {
             _channelManager = gameObject.AddComponent<ChannelManager>();
 
+            // Create necessary directories in WATCHED_DATA_PATH
             CreateRequiredDirectories();
 
             SelectChannelsToEnable();
-            StartCoroutine(InitChannels());
+            _ = InitChannelsAsync(); // Start initialization asynchronously
         }
 
-        private void CreateRequiredDirectories()
+        private async void CreateRequiredDirectories()
         {
-#if WINDOWS_UWP
-            CreateRequiredDirectoriesUWP();
-#else
-            CreateRequiredDirectoriesUnity();
-#endif
-        }
-
-#if WINDOWS_UWP
-        private async void CreateRequiredDirectoriesUWP()
-        {
-            StorageFolder watchedFolder;
-
             try
             {
-                // Get or create the watched folder
-                watchedFolder = await StorageFolder.GetFolderFromPathAsync(
+                StorageFolder watchedFolder = await StorageFolder.GetFolderFromPathAsync(
                     AppConfig.WATCHED_DATA_PATH
                 );
-            }
-            catch (Exception)
-            {
-                // If the folder does not exist, create it
-                watchedFolder = await StorageFolder
-                    .GetFolderFromPathAsync(
-                        System.IO.Path.GetDirectoryName(AppConfig.WATCHED_DATA_PATH)
-                    )
-                    .AsTask();
 
-                watchedFolder = await watchedFolder.CreateFolderAsync(
-                    System.IO.Path.GetFileName(AppConfig.WATCHED_DATA_PATH),
+                // Create "mesh" and "hands" directories if they do not exist
+                await watchedFolder.CreateFolderAsync("mesh", CreationCollisionOption.OpenIfExists);
+                await watchedFolder.CreateFolderAsync(
+                    "hands",
                     CreationCollisionOption.OpenIfExists
                 );
-                Debug.Log($"Created watch folder: {AppConfig.WATCHED_DATA_PATH}");
+
+                Debug.Log(
+                    $"Directories 'mesh' and 'hands' ensured inside: {AppConfig.WATCHED_DATA_PATH}"
+                );
             }
-
-            // Create "mesh" and "hands" directories if they do not exist
-            await watchedFolder.CreateFolderAsync("mesh", CreationCollisionOption.OpenIfExists);
-            await watchedFolder.CreateFolderAsync("hands", CreationCollisionOption.OpenIfExists);
-
-            Debug.Log(
-                $"Directories 'mesh' and 'hands' ensured inside: {AppConfig.WATCHED_DATA_PATH}"
-            );
-        }
-#else
-        private void CreateRequiredDirectoriesUnity()
-        {
-            string meshPath = System.IO.Path.Combine(AppConfig.WATCHED_DATA_PATH, "mesh");
-            string handsPath = System.IO.Path.Combine(AppConfig.WATCHED_DATA_PATH, "hands");
-
-            if (!System.IO.Directory.Exists(meshPath))
+            catch (Exception ex)
             {
-                System.IO.Directory.CreateDirectory(meshPath);
-                Debug.Log($"Created directory: {meshPath}");
-            }
-
-            if (!System.IO.Directory.Exists(handsPath))
-            {
-                System.IO.Directory.CreateDirectory(handsPath);
-                Debug.Log($"Created directory: {handsPath}");
+                Debug.LogError($"Error ensuring directories: {ex.Message}");
             }
         }
-#endif
 
         private void SelectChannelsToEnable()
         {
@@ -110,30 +68,68 @@ namespace Hololens.Assets.Scripts.Connection
             Debug.Log("Enabled channels: " + string.Join(", ", selectedChannels));
         }
 
-        private IEnumerator InitChannels()
+        private async Task InitChannelsAsync()
         {
             foreach (var config in _enabledChannels)
             {
-                yield return StartCoroutine(_channelManager.AddChannel(config));
+                await _channelManager.AddChannel(config); // Ensure AddChannel is asynchronous in UWP
             }
 
             Debug.Log("All channels have been started.");
-            StartGlobalProcessFileQueue();
+            _ = StartFileWatcherAsync(AppConfig.WATCHED_DATA_PATH); // Start file watcher asynchronously
+            _ = StartProcessFileQueueAsync(); // Start processing file queue asynchronously
 
-            yield return StartCoroutine(_channelManager.SendSignal("mesh", true));
+            await _channelManager.SendSignal("mesh", true);
         }
 
-        private void StartGlobalProcessFileQueue()
+        private async void StartFileWatcherAsync(string folderPath)
         {
-            if (!_isProcessFileQueueRunning)
+            try
             {
-                _isProcessFileQueueRunning = true;
-                StartCoroutine(ProcessFileQueue());
+                StorageFolder storageFolder = await StorageFolder.GetFolderFromPathAsync(
+                    folderPath
+                );
+
+                var queryOptions = new QueryOptions(CommonFileQuery.OrderByDate, new[] { ".obj" })
+                {
+                    FolderDepth = FolderDepth.Deep,
+                };
+
+                var fileQuery = storageFolder.CreateFileQueryWithOptions(queryOptions);
+                fileQuery.ContentsChanged += async (sender, args) =>
+                {
+                    try
+                    {
+                        var files = await sender.GetFilesAsync();
+                        foreach (var file in files)
+                        {
+                            string directoryName = file.Path.Split('\\').Reverse().Skip(1).First();
+                            _fileQueue.Enqueue($"{directoryName}|{file.Path}");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.LogError($"Error during file watching: {ex.Message}");
+                    }
+                };
+
+                // Trigger an initial scan
+                await fileQuery.GetFilesAsync();
+                Debug.Log($"FileWatcher started for folder: {folderPath}");
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"Failed to start file watcher: {ex.Message}");
             }
         }
 
-        private IEnumerator ProcessFileQueue()
+        private async void StartProcessFileQueueAsync()
         {
+            if (_isProcessFileQueueRunning)
+                return;
+
+            _isProcessFileQueueRunning = true;
+
             while (true)
             {
                 if (_fileQueue.TryDequeue(out var queueItem))
@@ -144,33 +140,28 @@ namespace Hololens.Assets.Scripts.Connection
 
                     byte[] fileData = null;
 
-#if WINDOWS_UWP
-                    var storageFile = await StorageFile.GetFileFromPathAsync(filePath);
-                    using (var stream = await storageFile.OpenReadAsync())
+                    try
                     {
-                        fileData = new byte[stream.Size];
-                        using (var reader = new DataReader(stream))
-                        {
-                            await reader.LoadAsync((uint)stream.Size);
-                            reader.ReadBytes(fileData);
-                        }
+                        fileData = await FileProcessor.ReadFileAsync(filePath); // UWP async file reader
                     }
-#else
-                    fileData = System.IO.File.ReadAllBytes(filePath);
-#endif
+                    catch (Exception ex)
+                    {
+                        Debug.LogError($"Error reading file: {filePath}, Error: {ex.Message}");
+                        continue;
+                    }
 
                     while (!_channelManager.IsChannelOpen(channel))
                     {
                         Debug.LogWarning($"Channel {channel} is not open. Reconnecting...");
-                        yield return new WaitForSeconds(5f);
+                        await Task.Delay(5000); // Async delay instead of WaitForSeconds
                     }
 
                     Debug.Log($"Transmitting file: {filePath} on channel: {channel}");
-                    yield return StartCoroutine(_channelManager.TransmitFile(channel, fileData));
+                    await _channelManager.TransmitFile(channel, fileData); // Ensure TransmitFile is async
                 }
                 else
                 {
-                    yield return new WaitForSeconds(0.6f);
+                    await Task.Delay(600); // Async delay instead of WaitForSeconds
                 }
             }
         }
@@ -184,6 +175,8 @@ namespace Hololens.Assets.Scripts.Connection
                     _channelManager.RemoveChannel(config.Name);
                 }
             }
+
+            Debug.Log("StartupClient cleanup complete.");
         }
     }
 }

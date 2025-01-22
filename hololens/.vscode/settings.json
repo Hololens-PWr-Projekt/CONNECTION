@@ -52,5 +52,6 @@
         "temp/":true,
         "Temp/":true
     },
-    "dotnet.defaultSolution": "hololens.sln"
+    "dotnet.defaultSolution": "hololens.sln",
+    "dotnet.preferCSharpExtension": true
 }
