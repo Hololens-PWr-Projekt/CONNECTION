@@ -1,7 +1,5 @@
 using System;
-using System.Buffers;
 using System.Collections;
-using System.Net.WebSockets;
 using System.Threading;
 using System.Threading.Tasks;
 using Hololens.Assets.Scripts.Connection.Model;
@@ -14,8 +12,14 @@ namespace Hololens.Assets.Scripts.Connection.Manager
     public class WebSocketManager
     {
         private readonly string _endpoint;
-        private ClientWebSocket _webSocket;
-        private static readonly ArrayPool<byte> _bufferPool = ArrayPool<byte>.Shared;
+        private CancellationTokenSource _cancellationTokenSource;
+
+#if UNITY_EDITOR
+        private System.Net.WebSockets.ClientWebSocket _webSocket;
+#elif WINDOWS_UWP
+        private Windows.Networking.Sockets.MessageWebSocket _webSocket;
+        private Windows.Storage.Streams.DataWriter _messageWriter;
+#endif
 
         public WebSocketManager(string endpoint)
         {
@@ -24,12 +28,17 @@ namespace Hololens.Assets.Scripts.Connection.Manager
 
         public IEnumerator ConnectAsync()
         {
-            _webSocket = new ClientWebSocket();
-            var connectTask = _webSocket.ConnectAsync(new Uri(_endpoint), CancellationToken.None);
+            _cancellationTokenSource = new CancellationTokenSource();
+
+#if UNITY_EDITOR
+            _webSocket = new System.Net.WebSockets.ClientWebSocket();
+            var connectTask = _webSocket.ConnectAsync(
+                new Uri(_endpoint),
+                _cancellationTokenSource.Token
+            );
 
             while (!connectTask.IsCompleted)
             {
-                // Wait until task is complete
                 yield return null;
             }
 
@@ -43,16 +52,58 @@ namespace Hololens.Assets.Scripts.Connection.Manager
             {
                 Debug.Log($"Connected to {_endpoint}");
             }
+#elif WINDOWS_UWP
+            _webSocket = new Windows.Networking.Sockets.MessageWebSocket();
+            _webSocket.Control.MessageType = Windows.Networking.Sockets.SocketMessageType.Binary;
+            _webSocket.MessageReceived += OnMessageReceived;
+
+            var connectTask = Task.Run(async () =>
+            {
+                try
+                {
+                    await _webSocket.ConnectAsync(new Uri(_endpoint));
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogError($"Failed to connect to {_endpoint}: {ex.Message}");
+                }
+            });
+
+            while (!connectTask.IsCompleted)
+            {
+                yield return null;
+            }
+
+            if (connectTask.Exception != null)
+            {
+                Debug.LogError(
+                    $"Failed to connect to {_endpoint}: {connectTask.Exception.InnerException?.Message}"
+                );
+            }
+            else
+            {
+                Debug.Log($"Connected to {_endpoint}");
+                _messageWriter = new Windows.Storage.Streams.DataWriter(_webSocket.OutputStream);
+            }
+#endif
         }
 
         public IEnumerator SendAsync(Packet packet)
         {
-            byte[] seralizedData = MessagePackSerializer.Serialize(packet);
-            Task sendTask = _webSocket.SendAsync(
-                new ArraySegment<byte>(seralizedData),
-                WebSocketMessageType.Binary,
+            byte[] serializedData = MessagePackSerializer.Serialize(packet);
+
+#if UNITY_EDITOR
+            if (_webSocket == null || _webSocket.State != System.Net.WebSockets.WebSocketState.Open)
+            {
+                Debug.LogError("WebSocket is not connected.");
+                yield break;
+            }
+
+            var sendTask = _webSocket.SendAsync(
+                new ArraySegment<byte>(serializedData),
+                System.Net.WebSockets.WebSocketMessageType.Binary,
                 true,
-                CancellationToken.None
+                _cancellationTokenSource.Token
             );
 
             while (!sendTask.IsCompleted)
@@ -62,18 +113,51 @@ namespace Hololens.Assets.Scripts.Connection.Manager
 
             if (sendTask.Exception != null)
             {
-                Debug.LogError($"Error sending raw message: {sendTask.Exception.Message}");
+                Debug.LogError($"Error sending message: {sendTask.Exception.Message}");
             }
+#elif WINDOWS_UWP
+            if (_webSocket == null || _messageWriter == null)
+            {
+                Debug.LogError("WebSocket is not connected.");
+                yield break;
+            }
+
+            var sendTask = Task.Run(async () =>
+            {
+                try
+                {
+                    _messageWriter.WriteBytes(serializedData);
+                    await _messageWriter.StoreAsync();
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogError($"Error sending message: {ex.Message}");
+                }
+            });
+
+            while (!sendTask.IsCompleted)
+            {
+                yield return null;
+            }
+
+            if (sendTask.Exception != null)
+            {
+                Debug.LogError(
+                    $"Error sending message: {sendTask.Exception.InnerException?.Message}"
+                );
+            }
+#endif
         }
 
         public IEnumerator ReceiveAsync(Action<Packet> onPacketReceived)
         {
-            byte[] buffer = _bufferPool.Rent(AppConfig.PACKET_BUFFER_BYTES);
-            try
+#if UNITY_EDITOR
+            byte[] buffer = new byte[AppConfig.PACKET_BUFFER_BYTES];
+            while (_webSocket.State == System.Net.WebSockets.WebSocketState.Open)
             {
-                Task<WebSocketReceiveResult> receiveTask = _webSocket.ReceiveAsync(
+                var receiveTask = _webSocket.ReceiveAsync(
                     new ArraySegment<byte>(buffer),
-                    CancellationToken.None
+                    _cancellationTokenSource.Token
                 );
 
                 while (!receiveTask.IsCompleted)
@@ -83,58 +167,101 @@ namespace Hololens.Assets.Scripts.Connection.Manager
 
                 if (receiveTask.Exception != null)
                 {
-                    Debug.LogError($"Error sending raw message: {receiveTask.Exception.Message}");
+                    Debug.LogError($"Error receiving message: {receiveTask.Exception.Message}");
                     yield break;
                 }
-                if (receiveTask.Result.MessageType == WebSocketMessageType.Close)
+
+                var result = receiveTask.Result;
+                if (result.MessageType == System.Net.WebSockets.WebSocketMessageType.Close)
                 {
-                    Debug.LogWarning("WebSocket closed by a server.");
+                    Debug.LogWarning("WebSocket closed by server.");
                     yield break;
                 }
-                Packet packet = MessagePackSerializer.Deserialize<Packet>(
-                    buffer.AsSpan(0, receiveTask.Result.Count).ToArray()
+
+                var packet = MessagePackSerializer.Deserialize<Packet>(
+                    buffer.AsSpan(0, result.Count).ToArray()
                 );
                 onPacketReceived?.Invoke(packet);
             }
-            finally
-            {
-                _bufferPool.Return(buffer);
-            }
+#elif WINDOWS_UWP
+            // Message receiving is handled asynchronously in OnMessageReceived
+            yield break;
+#endif
         }
+
+#if WINDOWS_UWP
+        private void OnMessageReceived(
+            Windows.Networking.Sockets.MessageWebSocket sender,
+            Windows.Networking.Sockets.MessageWebSocketMessageReceivedEventArgs args
+        )
+        {
+            Task.Run(async () =>
+            {
+                try
+                {
+                    using (var reader = args.GetDataReader())
+                    {
+                        uint messageLength = reader.UnconsumedBufferLength;
+                        byte[] buffer = new byte[messageLength];
+                        reader.ReadBytes(buffer);
+
+                        var packet = MessagePackSerializer.Deserialize<Packet>(buffer);
+                        UnityEngine.Debug.Log($"Message received: {packet}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    UnityEngine.Debug.LogError($"Error reading message: {ex.Message}");
+                }
+            });
+        }
+#endif
 
         public IEnumerator CloseAsync()
         {
-            if (_webSocket.State == WebSocketState.Open)
+            if (_webSocket != null)
             {
+#if UNITY_EDITOR
                 var closeTask = _webSocket.CloseAsync(
-                    WebSocketCloseStatus.NormalClosure,
+                    System.Net.WebSockets.WebSocketCloseStatus.NormalClosure,
                     "Closing",
-                    CancellationToken.None
+                    _cancellationTokenSource.Token
                 );
 
                 while (!closeTask.IsCompleted)
                 {
-                    // Wait until the task is complete
                     yield return null;
                 }
 
                 if (closeTask.Exception != null)
                 {
-                    Debug.LogError($"Error closing connection: {closeTask.Exception.Message}");
+                    Debug.LogError($"Error closing WebSocket: {closeTask.Exception.Message}");
                 }
-                else
+#elif WINDOWS_UWP
+                try
                 {
-                    Debug.Log($"Connection to {_endpoint} closed.");
+                    _webSocket.Dispose();
+                    _webSocket = null;
                 }
-
-                _webSocket.Dispose();
-                _webSocket = null;
+                catch (Exception ex)
+                {
+                    Debug.LogError($"Error closing WebSocket: {ex.Message}");
+                }
+#endif
+                _cancellationTokenSource?.Cancel();
+                _cancellationTokenSource?.Dispose();
+                Debug.Log($"Connection to {_endpoint} closed.");
             }
         }
 
         public bool IsWebSocketOpen()
         {
-            return _webSocket.State == WebSocketState.Open;
+#if UNITY_EDITOR
+            return _webSocket != null
+                && _webSocket.State == System.Net.WebSockets.WebSocketState.Open;
+#elif WINDOWS_UWP
+            return _webSocket != null;
+#endif
         }
     }
 }

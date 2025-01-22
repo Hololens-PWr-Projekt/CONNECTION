@@ -1,11 +1,16 @@
+using System;
 using System.Collections;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using Hololens.Assets.Scripts.Connection.Manager;
 using Hololens.Assets.Scripts.Connection.Utils;
 using UnityEngine;
+#if WINDOWS_UWP
+using Windows.Storage;
+using Windows.Foundation;
+using System.Threading.Tasks;
+#endif
 
 namespace Hololens.Assets.Scripts.Connection
 {
@@ -13,26 +18,85 @@ namespace Hololens.Assets.Scripts.Connection
     {
         private ChannelManager _channelManager;
 
-        private FileSystemWatcher _fileWatcher;
-        private List<ChannelConfig> _enabledChannels;
         private ConcurrentQueue<string> _fileQueue = new ConcurrentQueue<string>();
         private bool _isProcessFileQueueRunning = false;
 
-        private float _timeSinceLastFile = 0f;
+        private List<ChannelConfig> _enabledChannels;
 
         private void Start()
         {
             _channelManager = gameObject.AddComponent<ChannelManager>();
 
-            if (!Directory.Exists(AppConfig.WATCHED_DATA_PATH))
-            {
-                Directory.CreateDirectory(AppConfig.WATCHED_DATA_PATH);
-                Debug.Log($"Created watch folder: {AppConfig.WATCHED_DATA_PATH}");
-            }
+            CreateRequiredDirectories();
 
             SelectChannelsToEnable();
             StartCoroutine(InitChannels());
         }
+
+        private void CreateRequiredDirectories()
+        {
+#if WINDOWS_UWP
+            CreateRequiredDirectoriesUWP();
+#else
+            CreateRequiredDirectoriesUnity();
+#endif
+        }
+
+#if WINDOWS_UWP
+        private async void CreateRequiredDirectoriesUWP()
+        {
+            StorageFolder watchedFolder;
+
+            try
+            {
+                // Get or create the watched folder
+                watchedFolder = await StorageFolder.GetFolderFromPathAsync(
+                    AppConfig.WATCHED_DATA_PATH
+                );
+            }
+            catch (Exception)
+            {
+                // If the folder does not exist, create it
+                watchedFolder = await StorageFolder
+                    .GetFolderFromPathAsync(
+                        System.IO.Path.GetDirectoryName(AppConfig.WATCHED_DATA_PATH)
+                    )
+                    .AsTask();
+
+                watchedFolder = await watchedFolder.CreateFolderAsync(
+                    System.IO.Path.GetFileName(AppConfig.WATCHED_DATA_PATH),
+                    CreationCollisionOption.OpenIfExists
+                );
+                Debug.Log($"Created watch folder: {AppConfig.WATCHED_DATA_PATH}");
+            }
+
+            // Create "mesh" and "hands" directories if they do not exist
+            await watchedFolder.CreateFolderAsync("mesh", CreationCollisionOption.OpenIfExists);
+            await watchedFolder.CreateFolderAsync("hands", CreationCollisionOption.OpenIfExists);
+
+            Debug.Log(
+                $"Directories 'mesh' and 'hands' ensured inside: {AppConfig.WATCHED_DATA_PATH}"
+            );
+        }
+#else
+        private void CreateRequiredDirectoriesUnity()
+        {
+            string meshPath = System.IO.Path.Combine(AppConfig.WATCHED_DATA_PATH, "mesh");
+            string handsPath = System.IO.Path.Combine(AppConfig.WATCHED_DATA_PATH, "hands");
+
+            if (!System.IO.Directory.Exists(meshPath))
+            {
+                System.IO.Directory.CreateDirectory(meshPath);
+                Debug.Log($"Created directory: {meshPath}");
+            }
+
+            if (!System.IO.Directory.Exists(handsPath))
+            {
+                System.IO.Directory.CreateDirectory(handsPath);
+                Debug.Log($"Created directory: {handsPath}");
+            }
+        }
+#endif
 
         private void SelectChannelsToEnable()
         {
@@ -54,34 +118,9 @@ namespace Hololens.Assets.Scripts.Connection
             }
 
             Debug.Log("All channels have been started.");
-            StartFileWatcher(AppConfig.WATCHED_DATA_PATH);
-
-            // Start the global file processing coroutine
             StartGlobalProcessFileQueue();
 
             yield return StartCoroutine(_channelManager.SendSignal("mesh", true));
-        }
-
-        private void StartFileWatcher(string folderPath)
-        {
-            _fileWatcher = new FileSystemWatcher(folderPath)
-            {
-                Filter = "*.obj",
-                NotifyFilter = NotifyFilters.FileName | NotifyFilters.CreationTime,
-                IncludeSubdirectories = true, // Watch subdirectories for mesh and hands
-                EnableRaisingEvents = true,
-            };
-
-            _fileWatcher.Created += OnFileCreated;
-            Debug.Log(
-                $"FileWatcher started for folder: {folderPath} with IncludeSubdirectories: {_fileWatcher.IncludeSubdirectories}"
-            );
-        }
-
-        private void OnFileCreated(object sender, FileSystemEventArgs e)
-        {
-            string directoryName = new DirectoryInfo(Path.GetDirectoryName(e.FullPath)).Name;
-            _fileQueue.Enqueue($"{directoryName}|{e.FullPath}");
         }
 
         private void StartGlobalProcessFileQueue()
@@ -99,13 +138,26 @@ namespace Hololens.Assets.Scripts.Connection
             {
                 if (_fileQueue.TryDequeue(out var queueItem))
                 {
-                    _timeSinceLastFile = 0f; // Reset the grace period timer
-
                     string[] splitData = queueItem.Split('|');
                     string channel = splitData[0];
                     string filePath = splitData[1];
 
-                    byte[] fileData = File.ReadAllBytes(filePath);
+                    byte[] fileData = null;
+
+#if WINDOWS_UWP
+                    var storageFile = await StorageFile.GetFileFromPathAsync(filePath);
+                    using (var stream = await storageFile.OpenReadAsync())
+                    {
+                        fileData = new byte[stream.Size];
+                        using (var reader = new DataReader(stream))
+                        {
+                            await reader.LoadAsync((uint)stream.Size);
+                            reader.ReadBytes(fileData);
+                        }
+                    }
+#else
+                    fileData = System.IO.File.ReadAllBytes(filePath);
+#endif
 
                     while (!_channelManager.IsChannelOpen(channel))
                     {
@@ -118,38 +170,7 @@ namespace Hololens.Assets.Scripts.Connection
                 }
                 else
                 {
-                    // TDOO FOR TESTING PURPOSES
-                    // _timeSinceLastFile += 0.6f;
-
-                    // if (_timeSinceLastFile >= AppConfig.GRACE_PERIOD)
-                    // {
-                    //     Debug.Log($"Grace period elapsed. Sending signal on channel: mesh");
-                    //     yield return new WaitForSeconds(4f); // wait for trnsmission
-                    //     yield return StartCoroutine(_channelManager.SendSignal("mesh", false));
-
-                    //     _timeSinceLastFile = 0f; // Reset timer after sending signal
-                    // }
-
                     yield return new WaitForSeconds(0.6f);
-                }
-            }
-        }
-
-        private void DeleteAllObjFiles()
-        {
-            Debug.Log("Deleting all .obj and .meta files in watched folder...");
-            var filesToDelete = Directory
-                .GetFiles(AppConfig.WATCHED_DATA_PATH + "/mesh", "*.*", SearchOption.AllDirectories)
-                .Where(file => file.EndsWith(".obj") || file.EndsWith(".meta"));
-            foreach (var filePath in filesToDelete)
-            {
-                try
-                {
-                    File.Delete(filePath);
-                }
-                catch (IOException ex)
-                {
-                    Debug.LogError($"Failed to delete {filePath}: {ex.Message}");
                 }
             }
         }
@@ -163,17 +184,6 @@ namespace Hololens.Assets.Scripts.Connection
                     _channelManager.RemoveChannel(config.Name);
                 }
             }
-
-            if (_fileWatcher != null)
-            {
-                _fileWatcher.Created -= OnFileCreated; // Remove the event handler
-                _fileWatcher.EnableRaisingEvents = false;
-                _fileWatcher.Dispose();
-                _fileWatcher = null;
-                Debug.Log("FileWatcher stopped.");
-            }
-
-            DeleteAllObjFiles();
         }
     }
 }

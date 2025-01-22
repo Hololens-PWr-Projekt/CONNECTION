@@ -20,26 +20,29 @@ namespace Hololens.Assets.Scripts.Connection.Manager
 
             if (_channels.ContainsKey(channelName))
             {
-                Debug.Log($"Channel {channelName} has already exists.");
+                Debug.Log($"Channel {channelName} already exists.");
                 yield break;
             }
 
+            // Create and connect the WebSocket manager
             WebSocketManager manager = new(endpoint);
             yield return StartCoroutine(manager.ConnectAsync());
 
+            // Create the channel state
             ChannelState state = new(manager);
             _channels[channelName] = state;
 
+            // Packet received handler
             Action<Packet> onPacketReceived = (packet) =>
             {
                 Debug.Log($"Received packet on channel {channelName}: {packet.PacketId}");
                 ProcessPacket(channelName, packet);
             };
 
+            // Start listening for packets and processing the queue
             StartCoroutine(
                 ListenForPackets(manager, onPacketReceived, state.CancellationTokenSource.Token)
             );
-
             StartCoroutine(ProcessQueue(channelName, state.CancellationTokenSource.Token));
 
             Debug.Log($"Channel {channelName} added and connected.");
@@ -56,6 +59,7 @@ namespace Hololens.Assets.Scripts.Connection.Manager
                     && state.PacketsReceived.Count == packet.Chunk.TotalChunks
                 )
                 {
+                    // Reassemble the file when all chunks are received
                     FileProcessor.ReassembleFile(channelName, state.PacketsReceived);
                     state.PacketsReceived.Clear();
                 }
@@ -76,12 +80,15 @@ namespace Hololens.Assets.Scripts.Connection.Manager
             {
                 yield return StartCoroutine(manager.ReceiveAsync(onPacketReceived));
             }
+
+            Debug.Log("Stopped listening for packets due to cancellation.");
         }
 
         public void RemoveChannel(string channelName)
         {
             if (_channels.TryRemove(channelName, out var state))
             {
+                // Cancel tasks and close the WebSocket
                 state.CancellationTokenSource?.Cancel();
                 StartCoroutine(state.Manager.CloseAsync());
                 Debug.Log($"Channel {channelName} removed.");
@@ -113,15 +120,14 @@ namespace Hololens.Assets.Scripts.Connection.Manager
                 if (state.PacketQueue.TryDequeue(out var packet))
                 {
                     yield return StartCoroutine(state.Manager.SendAsync(packet));
-                    // Debug.Log(
-                    //     $"Packet {packet.Chunk.SequenceNumber + 1}/{packet.Chunk.TotalChunks} send on channel {channelName}"
-                    // );
                 }
                 else
                 {
-                    yield return new WaitForSeconds(0.1f);
+                    yield return new WaitForSeconds(0.1f); // Reduce CPU load with a short delay
                 }
             }
+
+            Debug.Log($"Stopped processing queue for channel {channelName} due to cancellation.");
         }
 
         public IEnumerator TransmitFile(string channelName, byte[] data)
@@ -137,10 +143,10 @@ namespace Hololens.Assets.Scripts.Connection.Manager
             foreach (var packet in packets)
             {
                 EnqueuePacket(channelName, packet);
-                yield return null;
+                yield return null; // Spread out work over multiple frames
             }
 
-            Debug.Log($"File transmission completed for channel {channelName}");
+            Debug.Log($"File transmission completed for channel {channelName}.");
         }
 
         public IEnumerator SendSignal(string channelName, bool start)
@@ -155,7 +161,7 @@ namespace Hololens.Assets.Scripts.Connection.Manager
                     new Chunk(1, 1, new byte[1])
                 );
                 yield return StartCoroutine(state.Manager.SendAsync(signalPacket));
-                Debug.Log($"{signal} signal sent for channel {channelName}");
+                Debug.Log($"{signal} signal sent for channel {channelName}.");
             }
             else
             {
@@ -175,7 +181,7 @@ namespace Hololens.Assets.Scripts.Connection.Manager
 
         private void OnDestroy()
         {
-            Debug.Log("ChannelManager is being destroyed and is cleaning resources...");
+            Debug.Log("ChannelManager is being destroyed and cleaning resources...");
 
             foreach (var channelName in _channels.Keys)
             {
