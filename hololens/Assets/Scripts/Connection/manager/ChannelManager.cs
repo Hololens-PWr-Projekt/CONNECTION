@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using Hololens.Assets.Scripts.Connection.Model;
@@ -12,6 +13,16 @@ namespace Hololens.Assets.Scripts.Connection.Manager
     public class ChannelManager : MonoBehaviour
     {
         private readonly ConcurrentDictionary<string, ChannelState> _channels = new();
+        private AdvancedLogger _logger;
+
+        private void Start()
+        {
+            string logDirectoryPath = Path.Combine(
+                Application.persistentDataPath,
+                "ServerWebRTC_Logs"
+            );
+            _logger = new AdvancedLogger(logDirectoryPath);
+        }
 
         public async Task AddChannelAsync(ChannelConfig channelConfig)
         {
@@ -20,7 +31,7 @@ namespace Hololens.Assets.Scripts.Connection.Manager
 
             if (_channels.ContainsKey(channelName))
             {
-                Debug.Log($"Channel {channelName} already exists.");
+                await _logger.LogAsync($"Channel {channelName} already exists.");
                 return;
             }
 
@@ -32,7 +43,7 @@ namespace Hololens.Assets.Scripts.Connection.Manager
 
             Action<Packet> onPacketReceived = packet =>
             {
-                Debug.Log($"Received packet on channel {channelName}: {packet.PacketId}");
+                _logger.Log($"Received packet on channel {channelName}: {packet.PacketId}");
                 ProcessPacket(channelName, packet);
             };
 
@@ -43,7 +54,7 @@ namespace Hololens.Assets.Scripts.Connection.Manager
             );
             _ = ProcessQueueAsync(channelName, state.CancellationTokenSource.Token);
 
-            Debug.Log($"Channel {channelName} added and connected.");
+            await _logger.LogAsync($"Channel {channelName} added and connected.");
         }
 
         private void ProcessPacket(string channelName, Packet packet)
@@ -63,7 +74,7 @@ namespace Hololens.Assets.Scripts.Connection.Manager
             }
             else
             {
-                Debug.LogError($"Channel {channelName} is not registered.");
+                _logger.Log($"Channel {channelName} is not registered.");
             }
         }
 
@@ -81,7 +92,7 @@ namespace Hololens.Assets.Scripts.Connection.Manager
                 }
                 catch (Exception ex)
                 {
-                    Debug.LogError($"Error listening for packets: {ex.Message}");
+                    await _logger.LogAsync($"Error listening for packets: {ex.ToString()}");
                     break;
                 }
             }
@@ -93,7 +104,7 @@ namespace Hololens.Assets.Scripts.Connection.Manager
             {
                 state.CancellationTokenSource?.Cancel();
                 await state.Manager.CloseAsync();
-                Debug.Log($"Channel {channelName} removed.");
+                await _logger.LogAsync($"Channel {channelName} removed.");
             }
         }
 
@@ -105,7 +116,7 @@ namespace Hololens.Assets.Scripts.Connection.Manager
             }
             else
             {
-                Debug.LogError($"Channel {channelName} is not registered.");
+                _logger.Log($"Channel {channelName} is not registered.");
             }
         }
 
@@ -116,7 +127,7 @@ namespace Hololens.Assets.Scripts.Connection.Manager
         {
             if (!_channels.TryGetValue(channelName, out var state))
             {
-                Debug.LogError($"Channel {channelName} is not registered.");
+                await _logger.LogAsync($"Channel {channelName} is not registered.");
                 return;
             }
 
@@ -137,7 +148,7 @@ namespace Hololens.Assets.Scripts.Connection.Manager
         {
             if (!_channels.TryGetValue(channelName, out var _))
             {
-                Debug.LogError($"Channel {channelName} is not registered.");
+                await _logger.LogAsync($"Channel {channelName} is not registered.");
                 return;
             }
 
@@ -149,7 +160,7 @@ namespace Hololens.Assets.Scripts.Connection.Manager
                 await Task.Yield();
             }
 
-            Debug.Log($"File transmission completed for channel {channelName}");
+            await _logger.LogAsync($"File transmission completed for channel {channelName}");
         }
 
         public async Task SendSignalAsync(string channelName, bool start)
@@ -164,11 +175,11 @@ namespace Hololens.Assets.Scripts.Connection.Manager
                     new Chunk(1, 1, new byte[1])
                 );
                 await state.Manager.SendAsync(signalPacket);
-                Debug.Log($"{signal} signal sent for channel {channelName}");
+                await _logger.LogAsync($"{signal} signal sent for channel {channelName}");
             }
             else
             {
-                Debug.LogError($"Channel {channelName} is not registered.");
+                await _logger.LogAsync($"Channel {channelName} is not registered.");
             }
         }
 
@@ -180,14 +191,14 @@ namespace Hololens.Assets.Scripts.Connection.Manager
 
         private async void OnDestroy()
         {
-            Debug.Log("ChannelManager is being destroyed and cleaning resources...");
+            await _logger.LogAsync("ChannelManager is being destroyed and cleaning resources...");
 
             foreach (var channelName in _channels.Keys)
             {
                 await RemoveChannelAsync(channelName);
             }
 
-            Debug.Log("ChannelManager cleanup complete.");
+            await _logger.LogAsync(("ChannelManager cleanup complete."));
         }
     }
 
