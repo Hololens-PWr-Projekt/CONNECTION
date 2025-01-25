@@ -14,16 +14,16 @@ Go to the project directory
   cd CONNECTION
 ```
 
-Install dependencies
+Add all scripts and install MessagePack for Unity
 
 ```bash
-  pip install -r requirements.txt
+  cd hololens
 ```
 
-Start all servers
+Start server
 
 ```bash
-  python3 start.py
+  cd server && dotnet build && dotnet run
 ```
 
 
